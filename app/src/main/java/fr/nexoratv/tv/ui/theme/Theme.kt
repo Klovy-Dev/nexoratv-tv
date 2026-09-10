@@ -3,6 +3,8 @@ package fr.nexoratv.tv.ui.theme
 import android.app.Activity
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
@@ -21,6 +23,15 @@ val NexoraBlue = Color(0xFF2D7DF6)
 val NexoraNight = Color(0xFF0B1220)
 val NexoraSurface = Color(0xFF141A28)
 val NexoraSurfaceHi = Color(0xFF1E2740)
+
+val NexoraGradient = Brush.linearGradient(listOf(NexoraPink, NexoraPurple, NexoraBlue))
+
+/** Fond général : bleu nuit avec une lueur violette en haut à gauche. */
+val NexoraBackdrop = Brush.radialGradient(
+    colors = listOf(Color(0xFF1C1442), NexoraNight),
+    center = Offset(300f, 200f),
+    radius = 1700f,
+)
 
 private val DarkColors = darkColorScheme(
     primary = NexoraPurple,

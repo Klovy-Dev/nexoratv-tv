@@ -8,6 +8,8 @@ import fr.nexoratv.tv.core.model.PlaylistSource
 import fr.nexoratv.tv.core.model.Series
 import fr.nexoratv.tv.core.model.XtreamOutput
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
@@ -117,18 +119,26 @@ class XtreamClient(
     }
 
     // --------------------------------------------------------- Chargement
-    suspend fun loadAll(): LoadedPlaylist {
+    suspend fun loadAll(): LoadedPlaylist = coroutineScope {
         authenticate()
+        // Live d'abord (fait échouer vite si le compte pose problème), puis
+        // films + séries en parallèle.
         val live = fetchStreams("get_live_categories", "get_live_streams", "live", liveExt, MediaKind.LIVE)
         if (live.isEmpty()) throw XtreamException("Aucune chaîne renvoyée par le serveur.")
-        val movies = runCatching {
-            fetchStreams("get_vod_categories", "get_vod_streams", "movie", null, MediaKind.MOVIE)
-        }.onFailure { log("films : échec — ${it.message}") }.getOrDefault(emptyList())
-        val series = runCatching { fetchSeries() }
-            .onFailure { log("séries : échec — ${it.message}") }
-            .getOrDefault(emptyList())
+        val moviesJob = async {
+            runCatching {
+                fetchStreams("get_vod_categories", "get_vod_streams", "movie", null, MediaKind.MOVIE)
+            }.onFailure { log("films : échec — ${it.message}") }.getOrDefault(emptyList())
+        }
+        val seriesJob = async {
+            runCatching { fetchSeries() }
+                .onFailure { log("séries : échec — ${it.message}") }
+                .getOrDefault(emptyList())
+        }
+        val movies = moviesJob.await()
+        val series = seriesJob.await()
         log("terminé : ${live.size} chaînes · ${movies.size} films · ${series.size} séries")
-        return LoadedPlaylist(live, movies, series)
+        LoadedPlaylist(live, movies, series)
     }
 
     private suspend fun fetchStreams(
