@@ -1,6 +1,7 @@
 package fr.nexoratv.tv.data
 
 import android.content.Context
+import fr.nexoratv.tv.core.DebugLog
 import fr.nexoratv.tv.core.Net
 import fr.nexoratv.tv.core.m3u.M3uParser
 import fr.nexoratv.tv.core.model.Channel
@@ -40,12 +41,17 @@ class CatalogRepository(private val context: Context) {
         onProgress: (LoadProgress) -> Unit = {},
     ): LoadedPlaylist {
         val f = cacheFile(source.id)
+        DebugLog.section("Chargement « ${source.name} » (${source.kind})" + if (forceRefresh) " · forcé" else "")
         if (!forceRefresh && f.exists() &&
             System.currentTimeMillis() - f.lastModified() < cacheMaxAgeMs
         ) {
-            readCache(f)?.let { return it }
+            readCache(f)?.let {
+                DebugLog.line("cache utilisé : ${it.live.size} chaînes · ${it.movies.size} films · ${it.series.size} séries")
+                return it
+            }
         }
         val fresh = fetch(source, onProgress)
+        DebugLog.line("réseau OK : ${fresh.live.size} chaînes · ${fresh.movies.size} films · ${fresh.series.size} séries")
         writeCache(f, fresh)
         return fresh
     }
@@ -57,11 +63,14 @@ class CatalogRepository(private val context: Context) {
         source: PlaylistSource,
         onProgress: (LoadProgress) -> Unit,
     ): LoadedPlaylist = when (source.kind) {
-        SourceKind.XTREAM -> XtreamClient(source, Net.http).loadAll(onProgress)
+        SourceKind.XTREAM ->
+            XtreamClient(source, Net.http, log = { DebugLog.line(it) }).loadAll(onProgress)
         SourceKind.M3U_URL -> withContext(Dispatchers.IO) {
             onProgress(LoadProgress(connected = false))
+            DebugLog.line("M3U : téléchargement…")
             val body = Net.http.newCall(Request.Builder().url(source.m3uUrl!!).build())
                 .execute().use { it.body?.string().orEmpty() }
+            DebugLog.line("M3U : ${body.length} octets reçus")
             onProgress(LoadProgress(connected = true))
             val channels = withContext(Dispatchers.Default) { M3uParser.parse(body) }
             onProgress(LoadProgress(connected = true, live = channels.size))

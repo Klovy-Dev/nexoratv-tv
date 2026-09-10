@@ -55,6 +55,7 @@ private fun Root(onPlay: (sourceId: String, queue: List<Channel>, startIndex: In
     val catalog by vm.catalogState.collectAsState()
     val loadProgress by vm.loadProgress.collectAsState()
     val update by vm.updateState.collectAsState()
+    val diagnostics by vm.debugLog.collectAsState()
 
     BackHandler(enabled = screen is Screen.Catalog || screen == Screen.Settings) { vm.goHome() }
     BackHandler(enabled = screen == Screen.Connect && sources.isNotEmpty()) { vm.goHome() }
@@ -71,10 +72,13 @@ private fun Root(onPlay: (sourceId: String, queue: List<Channel>, startIndex: In
             sourceName = vm.currentSource?.name ?: "—",
             expiresAt = ready?.playlist?.expiresAt,
             update = update,
+            diagnostics = diagnostics,
             onCheckUpdate = vm::checkUpdate,
             onInstall = vm::installUpdate,
             onLaunchInstall = vm::launchInstall,
             onChangePlaylist = vm::goConnect,
+            onReloadCatalog = { vm.loadCatalog(true) },
+            onClearDiagnostics = vm::clearDebugLog,
             onBack = vm::goHome,
         )
 

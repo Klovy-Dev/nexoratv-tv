@@ -3,6 +3,7 @@ package fr.nexoratv.tv
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import fr.nexoratv.tv.core.DebugLog
 import fr.nexoratv.tv.core.DeviceId
 import fr.nexoratv.tv.core.Net
 import fr.nexoratv.tv.core.mac.MacPortalClient
@@ -71,6 +72,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _update = MutableStateFlow<UpdateState>(UpdateState.Idle)
     val updateState: StateFlow<UpdateState> = _update.asStateFlow()
+
+    /** Journal de chargement (Paramètres → Diagnostic). */
+    val debugLog: StateFlow<List<String>> = DebugLog.lines
+    fun clearDebugLog() = DebugLog.clear()
 
     val sources: StateFlow<List<PlaylistSource>> = store.sources
     val currentSource: PlaylistSource? get() = store.selected
@@ -155,6 +160,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             }
                 .onSuccess { _catalog.value = CatalogState.Ready(it) }
                 .onFailure { e ->
+                    DebugLog.line("ÉCHEC chargement : ${e.javaClass.simpleName} ${e.message ?: ""}")
                     if (_catalog.value !is CatalogState.Ready) {
                         _catalog.value = CatalogState.Error(
                             (e as? XtreamException)?.message ?: e.message ?: "Chargement impossible"

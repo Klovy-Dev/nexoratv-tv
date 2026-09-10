@@ -65,10 +65,13 @@ fun SettingsScreen(
     sourceName: String,
     expiresAt: Long?,
     update: UpdateState,
+    diagnostics: List<String>,
     onCheckUpdate: () -> Unit,
     onInstall: (UpdateInfo) -> Unit,
     onLaunchInstall: (File) -> Unit,
     onChangePlaylist: () -> Unit,
+    onReloadCatalog: () -> Unit,
+    onClearDiagnostics: () -> Unit,
     onBack: () -> Unit,
 ) {
     val backFocus = remember { FocusRequester() }
@@ -118,6 +121,14 @@ fun SettingsScreen(
                         "Vider le cache du catalogue",
                     )
                 )
+            }
+
+            Group("Diagnostic") {
+                DiagnosticBlock(diagnostics)
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Button(onClick = onReloadCatalog) { Text("Recharger le catalogue") }
+                    Button(onClick = onClearDiagnostics) { Text("Vider") }
+                }
             }
 
             Text(
@@ -200,6 +211,37 @@ private fun UpdateBlock(
             is UpdateState.ReadyToInstall -> {
                 Text("Téléchargement terminé.", color = NexoraOk, fontSize = 14.sp)
                 Button(onClick = { onLaunchInstall(update.file) }) { Text("Installer maintenant") }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DiagnosticBlock(lines: List<String>) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(NexoraNight)
+            .border(1.dp, NexoraLine, RoundedCornerShape(12.dp))
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        if (lines.isEmpty()) {
+            Text(
+                "Aucun événement pour l'instant. Lance « Recharger le catalogue » pour voir le détail.",
+                color = NexoraInkFaint,
+                fontSize = 12.sp,
+            )
+        } else {
+            lines.takeLast(16).forEach { l ->
+                Text(
+                    l,
+                    color = NexoraInkDim,
+                    fontSize = 11.sp,
+                    lineHeight = 14.sp,
+                    fontFamily = FontFamily.Monospace,
+                )
             }
         }
     }
