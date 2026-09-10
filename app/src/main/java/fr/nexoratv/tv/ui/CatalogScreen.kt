@@ -127,7 +127,7 @@ fun CatalogScreen(
     Box(Modifier.fillMaxSize().background(NexoraBackdrop)) {
         Column(Modifier.fillMaxSize().padding(horizontal = 40.dp, vertical = 28.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onBack, modifier = Modifier.focusRequester(backFocus)) {
+                IconButton(onClick = onBack) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, "Retour")
                 }
                 Spacer(Modifier.width(12.dp))
