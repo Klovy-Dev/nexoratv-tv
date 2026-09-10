@@ -1,5 +1,6 @@
 package fr.nexoratv.tv.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -19,6 +21,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -41,6 +44,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -62,9 +66,11 @@ import fr.nexoratv.tv.ui.theme.Bricolage
 import fr.nexoratv.tv.ui.theme.NexoraBackdrop
 import fr.nexoratv.tv.ui.theme.NexoraInk
 import fr.nexoratv.tv.ui.theme.NexoraInkFaint
+import fr.nexoratv.tv.ui.theme.NexoraInkDim
 import fr.nexoratv.tv.ui.theme.NexoraPurple
 import fr.nexoratv.tv.ui.theme.NexoraSurface
 import fr.nexoratv.tv.ui.theme.NexoraSurface3
+import kotlinx.coroutines.delay
 
 /** Grille d'une section : recherche, catégories, colonnes fixes, place
  *  conservée au retour (état hissé dans le ViewModel). */
@@ -121,6 +127,19 @@ fun CatalogScreen(
     val firstChip = remember { FocusRequester() }
     LaunchedEffect(section) { runCatching { firstChip.requestFocus() } }
 
+    // Recherche : le champ n'est JAMAIS dans le chemin de navigation D-pad. On
+    // affiche une barre-bouton ; OK dessus ouvre l'édition (et le clavier), et
+    // seulement là. Retour / Rechercher / descendre = on referme.
+    var searchOpen by remember(section) { mutableStateOf(false) }
+    var fieldTouched by remember { mutableStateOf(false) }
+    val searchBar = remember { FocusRequester() }
+    val searchField = remember { FocusRequester() }
+    fun closeSearch() { searchOpen = false; runCatching { searchBar.requestFocus() } }
+    BackHandler(enabled = searchOpen) { closeSearch() }
+    LaunchedEffect(searchOpen) {
+        if (searchOpen) { fieldTouched = false; delay(80); runCatching { searchField.requestFocus() } }
+    }
+
     Box(Modifier.fillMaxSize().background(NexoraBackdrop)) {
         Column(Modifier.fillMaxSize().padding(horizontal = 40.dp, vertical = 28.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -138,32 +157,76 @@ fun CatalogScreen(
 
             Spacer(Modifier.height(14.dp))
 
-            OutlinedTextField(
-                value = query,
-                onValueChange = { query = it; vm.catalogQuery[section] = it },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                leadingIcon = { M3Icon(Icons.Default.Search, null) },
-                trailingIcon = {
-                    if (query.isNotEmpty()) {
-                        M3IconButton(onClick = { query = ""; vm.catalogQuery[section] = "" }) {
-                            M3Icon(Icons.Default.Close, "Effacer")
+            if (searchOpen) {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it; vm.catalogQuery[section] = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(searchField)
+                        .onFocusChanged {
+                            if (it.isFocused) fieldTouched = true
+                            else if (fieldTouched && searchOpen) searchOpen = false
+                        },
+                    singleLine = true,
+                    leadingIcon = { M3Icon(Icons.Default.Search, null) },
+                    trailingIcon = {
+                        M3IconButton(onClick = {
+                            if (query.isEmpty()) closeSearch()
+                            else { query = ""; vm.catalogQuery[section] = "" }
+                        }) { M3Icon(Icons.Default.Close, "Fermer") }
+                    },
+                    placeholder = { M3Text("Rechercher dans ${section.label.lowercase()}") },
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = { closeSearch() }),
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = NexoraSurface,
+                        unfocusedContainerColor = NexoraSurface,
+                        focusedTextColor = NexoraInk,
+                        unfocusedTextColor = NexoraInk,
+                    ),
+                )
+            } else {
+                Surface(
+                    onClick = { searchOpen = true },
+                    modifier = Modifier.fillMaxWidth().focusRequester(searchBar),
+                    shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(12.dp)),
+                    colors = ClickableSurfaceDefaults.colors(
+                        containerColor = NexoraSurface,
+                        focusedContainerColor = NexoraSurface3,
+                    ),
+                ) {
+                    Row(
+                        Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.Default.Search, null, tint = NexoraInkFaint, modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(12.dp))
+                        Text(
+                            query.ifBlank { "Rechercher dans ${section.label.lowercase()}" },
+                            color = if (query.isBlank()) NexoraInkFaint else NexoraInk,
+                            fontSize = 14.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (query.isNotBlank()) {
+                            Text("appuyez pour modifier", color = NexoraInkDim, fontSize = 11.sp)
                         }
                     }
-                },
-                placeholder = { M3Text("Rechercher dans ${section.label.lowercase()}") },
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = NexoraSurface,
-                    unfocusedContainerColor = NexoraSurface,
-                    focusedTextColor = NexoraInk,
-                    unfocusedTextColor = NexoraInk,
-                ),
-            )
+                }
+            }
 
             Spacer(Modifier.height(14.dp))
 
-            if (!searching && groups.size > 1) {
+            if (searching) {
+                Chip(
+                    label = "✕  Effacer la recherche",
+                    selected = false,
+                    modifier = Modifier.focusRequester(firstChip),
+                ) { query = ""; vm.catalogQuery[section] = "" }
+                Spacer(Modifier.height(16.dp))
+            } else if (groups.size > 1) {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(groups.size) { i ->
                         Chip(
