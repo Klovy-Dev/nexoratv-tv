@@ -8,13 +8,15 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -125,7 +127,6 @@ fun CatalogScreen(
     val columns = gridColumns(section, widthDp)
 
     val firstChip = remember { FocusRequester() }
-    LaunchedEffect(section) { runCatching { firstChip.requestFocus() } }
 
     // Recherche : le champ n'est JAMAIS dans le chemin de navigation D-pad. On
     // affiche une barre-bouton ; OK dessus ouvre l'édition (et le clavier), et
@@ -138,6 +139,13 @@ fun CatalogScreen(
     BackHandler(enabled = searchOpen) { closeSearch() }
     LaunchedEffect(searchOpen) {
         if (searchOpen) { fieldTouched = false; delay(80); runCatching { searchField.requestFocus() } }
+    }
+    // Focus initial : la catégorie en cours (ou la barre de recherche à défaut).
+    LaunchedEffect(section) {
+        delay(50)
+        if (runCatching { firstChip.requestFocus() }.isFailure) {
+            runCatching { searchBar.requestFocus() }
+        }
     }
 
     Box(Modifier.fillMaxSize().background(NexoraBackdrop)) {
@@ -217,55 +225,68 @@ fun CatalogScreen(
                 }
             }
 
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(16.dp))
 
-            if (searching) {
-                Chip(
-                    label = "✕  Effacer la recherche",
-                    selected = false,
-                    modifier = Modifier.focusRequester(firstChip),
-                ) { query = ""; vm.catalogQuery[section] = "" }
-                Spacer(Modifier.height(16.dp))
-            } else if (groups.size > 1) {
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(groups.size) { i ->
-                        Chip(
-                            label = groups[i] ?: "Tout",
-                            selected = i == safeIndex,
-                            modifier = if (i == 0) Modifier.focusRequester(firstChip) else Modifier,
-                        ) { groupIndex = i; vm.catalogCategory[section] = i }
-                    }
-                }
-                Spacer(Modifier.height(16.dp))
-            }
-
-            Box(Modifier.fillMaxWidth().weight(1f)) {
-                if (visible.isEmpty()) {
-                    if (searching) StatusScreen(
-                        title = "Aucun résultat pour « ${query.trim()} »",
-                        subtitle = "Vérifie l'orthographe, ou parcours les catégories.",
-                        kind = StatusKind.SEARCH,
-                        actionLabel = "Effacer la recherche",
-                        onAction = { query = ""; vm.catalogQuery[section] = "" },
-                    ) else StatusScreen(
-                        title = "Rien dans cette catégorie",
-                        kind = StatusKind.EMPTY,
-                    )
-                } else {
-                    LazyVerticalGrid(
-                        state = gridState,
-                        columns = GridCells.Fixed(columns),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp),
-                        // marge = débordement du focusedScale (1.06×) → carte jamais coupée
-                        contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 12.dp, bottom = 48.dp),
+            Row(Modifier.fillMaxWidth().weight(1f)) {
+                // Catégories = barre latérale gauche (masquée pendant une recherche).
+                if (!searching && groups.size > 1) {
+                    val sidebarState = rememberLazyListState(safeIndex.coerceAtMost((groups.size - 1).coerceAtLeast(0)))
+                    LazyColumn(
+                        modifier = Modifier.width(224.dp).fillMaxHeight(),
+                        state = sidebarState,
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        contentPadding = PaddingValues(vertical = 4.dp, bottom = 40.dp),
                     ) {
-                        items(visible, key = { it.id }) { ch ->
-                            PosterCard(ch) {
-                                when (ch.kind) {
-                                    MediaKind.SERIES -> onOpenSeries(ch.streamId.orEmpty(), ch.name, ch.logo)
-                                    MediaKind.MOVIE -> onOpenMovie(ch)
-                                    MediaKind.LIVE -> onPlay(sourceId, visible, visible.indexOf(ch).coerceAtLeast(0))
+                        items(groups.size) { i ->
+                            SidebarItem(
+                                label = groups[i] ?: "Tout",
+                                selected = i == safeIndex,
+                                modifier = if (i == safeIndex) Modifier.focusRequester(firstChip) else Modifier,
+                            ) { groupIndex = i; vm.catalogCategory[section] = i }
+                        }
+                    }
+                    Spacer(Modifier.width(22.dp))
+                }
+
+                Column(Modifier.fillMaxHeight().weight(1f)) {
+                    if (searching) {
+                        Chip(
+                            label = "✕  Effacer la recherche",
+                            selected = false,
+                            modifier = Modifier.focusRequester(firstChip),
+                        ) { query = ""; vm.catalogQuery[section] = "" }
+                        Spacer(Modifier.height(14.dp))
+                    }
+
+                    Box(Modifier.fillMaxWidth().weight(1f)) {
+                        if (visible.isEmpty()) {
+                            if (searching) StatusScreen(
+                                title = "Aucun résultat pour « ${query.trim()} »",
+                                subtitle = "Vérifie l'orthographe, ou parcours les catégories.",
+                                kind = StatusKind.SEARCH,
+                                actionLabel = "Effacer la recherche",
+                                onAction = { query = ""; vm.catalogQuery[section] = "" },
+                            ) else StatusScreen(
+                                title = "Rien dans cette catégorie",
+                                kind = StatusKind.EMPTY,
+                            )
+                        } else {
+                            LazyVerticalGrid(
+                                state = gridState,
+                                columns = GridCells.Fixed(columns),
+                                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(16.dp),
+                                // marge = débordement du focusedScale (1.06×)
+                                contentPadding = PaddingValues(start = 6.dp, end = 6.dp, top = 8.dp, bottom = 48.dp),
+                            ) {
+                                items(visible, key = { it.id }) { ch ->
+                                    PosterCard(ch) {
+                                        when (ch.kind) {
+                                            MediaKind.SERIES -> onOpenSeries(ch.streamId.orEmpty(), ch.name, ch.logo)
+                                            MediaKind.MOVIE -> onOpenMovie(ch)
+                                            MediaKind.LIVE -> onPlay(sourceId, visible, visible.indexOf(ch).coerceAtLeast(0))
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -273,6 +294,33 @@ fun CatalogScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun SidebarItem(
+    label: String,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier.fillMaxWidth(),
+        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(10.dp)),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = if (selected) NexoraSurface3 else NexoraSurface,
+            focusedContainerColor = NexoraPurple,
+        ),
+    ) {
+        Text(
+            label,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            fontSize = 13.sp,
+            color = NexoraInk,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp),
+        )
     }
 }
 

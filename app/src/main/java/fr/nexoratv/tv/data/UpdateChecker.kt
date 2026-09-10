@@ -27,21 +27,33 @@ data class UpdateInfo(
  */
 object UpdateChecker {
 
-    private const val MANIFEST =
+    // API GitHub = toujours à jour (raw.githubusercontent est mis en cache CDN
+    // jusqu'à 5 min et ignore les query-strings). Repli sur raw en cas de
+    // limite de débit de l'API.
+    private const val MANIFEST_API =
+        "https://api.github.com/repos/Klovy-Dev/nexoratv-tv/contents/update.json?ref=main"
+    private const val MANIFEST_RAW =
         "https://raw.githubusercontent.com/Klovy-Dev/nexoratv-tv/main/update.json"
 
     private fun apkFile(context: Context) = File(context.cacheDir, "NexoraTV-update.apk")
 
     suspend fun fetch(): UpdateInfo? = withContext(Dispatchers.IO) {
+        parse(load(MANIFEST_API, github = true)) ?: parse(load(MANIFEST_RAW, github = false))
+    }
+
+    private fun load(url: String, github: Boolean): String? = runCatching {
+        val b = Request.Builder().url(url)
+            .header("User-Agent", "NexoraTV")
+            .header("Cache-Control", "no-cache")
+        if (github) b.header("Accept", "application/vnd.github.raw")
+        Net.http.newCall(b.build()).execute().use { res ->
+            if (!res.isSuccessful) null else res.body?.string()
+        }
+    }.getOrNull()
+
+    private fun parse(body: String?): UpdateInfo? = body?.let {
         runCatching {
-            val req = Request.Builder().url(MANIFEST)
-                .header("Cache-Control", "no-cache")
-                .build()
-            val body = Net.http.newCall(req).execute().use { res ->
-                if (!res.isSuccessful) return@runCatching null
-                res.body?.string().orEmpty()
-            }
-            val o = JSONObject(body)
+            val o = JSONObject(it)
             UpdateInfo(
                 versionName = o.optString("versionName"),
                 versionCode = o.optInt("versionCode"),

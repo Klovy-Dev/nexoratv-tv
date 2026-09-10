@@ -1,9 +1,5 @@
-Passe finition : la même app, au propre.
-
-- Police maison (titres + interface), couleurs unifiées, focus (contour dégradé + zoom) désormais distinct de la sélection (fond plein)
-- Grille : jaquettes en fondu (fini le carré gris qui saute), cadre verrouillé, la carte agrandie au curseur n'est plus coupée au bord
-- On retrouve sa place au retour d'une fiche (position, catégorie, recherche conservées)
-- Accueil : grande affiche d'ambiance en fond qui tourne, tuiles en verre dépoli
-- Transitions en fondu entre les écrans
-- États vides / erreurs soignés (pastille + message + action)
-- Lecteur : barre de progression dégradée, temps, bouton central mis en avant, aux couleurs NexoraTV
+- Accueil : logo en grand au centre des blocs TV / Films / Séries
+- Catégories en barre latérale à gauche (au lieu d'une rangée au-dessus)
+- Titres sur 2 lignes : hauteur réservée, plus de décalage entre les jaquettes
+- On revient sur la bonne catégorie (et dessus) au retour d'un film / d'une série
+- Recherche des mises à jour via l'API GitHub (plus de cache de 5 min qui masquait la nouvelle version)

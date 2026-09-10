@@ -92,12 +92,15 @@ fun PosterCard(ch: Channel, onClick: () -> Unit) {
                     }
                 }
             }
-            Box(Modifier.padding(top = 6.dp, start = 2.dp, end = 2.dp).height(32.dp)) {
+            // Hauteur fixe = 2 lignes réservées (minLines=2) : les titres 1 et
+            // 2 lignes occupent exactement la même place → rangées alignées.
+            Box(Modifier.fillMaxWidth().padding(top = 6.dp, start = 2.dp, end = 2.dp).height(38.dp)) {
                 Text(
                     ch.name,
                     maxLines = 2,
+                    minLines = 2,
                     fontSize = 12.sp,
-                    lineHeight = 15.sp,
+                    lineHeight = 16.sp,
                     color = Color(0xFFC7CEDE),
                 )
             }

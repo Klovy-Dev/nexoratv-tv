@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -40,6 +41,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Border
@@ -133,8 +135,10 @@ fun HubScreen(
 
             Spacer(Modifier.weight(1f))
 
-            if (feat != null) {
-                Column(Modifier.widthIn(max = 520.dp)) {
+            // Hauteur fixe : le titre « à la une » qui passe de 1 à 2 lignes ne
+            // doit pas décaler les 3 blocs en dessous.
+            Column(Modifier.widthIn(max = 560.dp).height(104.dp)) {
+                if (feat != null) {
                     Text(
                         "À LA UNE",
                         color = NexoraPink,
@@ -147,17 +151,18 @@ fun HubScreen(
                         feat.title,
                         fontFamily = Bricolage,
                         fontWeight = FontWeight.ExtraBold,
-                        fontSize = 34.sp,
+                        fontSize = 32.sp,
+                        lineHeight = 34.sp,
                         color = Color.White,
                         maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
                     )
                     if (feat.subtitle.isNotBlank()) {
-                        Spacer(Modifier.size(4.dp))
-                        Text(feat.subtitle, color = NexoraInkDim, fontSize = 14.sp)
+                        Text(feat.subtitle, color = NexoraInkDim, fontSize = 13.sp, maxLines = 1)
                     }
                 }
-                Spacer(Modifier.size(28.dp))
             }
+            Spacer(Modifier.size(24.dp))
 
             Row(
                 Modifier.fillMaxWidth(),
@@ -210,12 +215,14 @@ private fun HubCard(
         ),
     ) {
         Column(
-            Modifier.fillMaxSize().clip(RoundedCornerShape(16.dp)).background(NexoraGlass).padding(24.dp),
+            Modifier.fillMaxSize().clip(RoundedCornerShape(16.dp)).background(NexoraGlass).padding(20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
         ) {
-            Icon(icon, null, tint = Color(0xFFB9C2D9), modifier = Modifier.size(38.dp))
-            Spacer(Modifier.weight(1f))
+            Icon(icon, null, tint = Color(0xFFCBD3E6), modifier = Modifier.size(66.dp))
+            Spacer(Modifier.size(12.dp))
             Text(label, fontFamily = Bricolage, fontWeight = FontWeight.Bold, fontSize = 24.sp, color = NexoraInk)
-            Text(sub, fontSize = 13.sp, color = NexoraInkDim)
+            Text(sub, fontSize = 12.sp, color = NexoraInkDim)
         }
     }
 }
