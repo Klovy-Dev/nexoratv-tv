@@ -142,7 +142,7 @@ fun CatalogScreen(
                     columns = GridCells.Fixed(columns),
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
-                    contentPadding = PaddingValues(vertical = 8.dp, bottom = 40.dp),
+                    contentPadding = PaddingValues(top = 8.dp, bottom = 40.dp),
                 ) {
                     items(visible, key = { it.id }) { ch ->
                         PosterCard(ch) {
