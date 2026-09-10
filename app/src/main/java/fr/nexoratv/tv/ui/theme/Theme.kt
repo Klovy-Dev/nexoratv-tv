@@ -2,7 +2,10 @@ package fr.nexoratv.tv.ui.theme
 
 import android.app.Activity
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
+import androidx.compose.material3.LocalContentColor as M3LocalContentColor
+import androidx.tv.material3.LocalContentColor as TvLocalContentColor
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -86,7 +89,14 @@ fun NexoraTheme(content: @Composable () -> Unit) {
     }
     MaterialTheme(colorScheme = DarkColors, typography = Typography()) {
         TvMaterialTheme(colorScheme = TvDarkColors) {
-            content()
+            // Hors d'un Surface tv-material3, `Text` prend LocalContentColor
+            // qui vaut noir par défaut. On force la couleur claire du thème.
+            CompositionLocalProvider(
+                TvLocalContentColor provides NexoraInk,
+                M3LocalContentColor provides NexoraInk,
+            ) {
+                content()
+            }
         }
     }
 }

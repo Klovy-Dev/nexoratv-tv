@@ -21,8 +21,8 @@ android {
         applicationId = "fr.nexoratv.tv"
         minSdk = 23            // Android 6+ (couvre les Fire TV Stick récents)
         targetSdk = 35
-        versionCode = 4
-        versionName = "0.4.0"
+        versionCode = 5
+        versionName = "0.4.1"
         vectorDrawables.useSupportLibrary = true
     }
 

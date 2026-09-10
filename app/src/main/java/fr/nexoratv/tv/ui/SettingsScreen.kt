@@ -90,7 +90,7 @@ fun SettingsScreen(
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, "Retour")
                 }
                 Spacer(Modifier.width(10.dp))
-                Text("Paramètres", fontSize = 28.sp, fontWeight = FontWeight.Bold)
+                Text("Paramètres", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = NexoraInk)
             }
 
             Group("Mise à jour") {

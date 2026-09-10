@@ -56,7 +56,7 @@ import fr.nexoratv.tv.core.model.LoadedPlaylist
 import fr.nexoratv.tv.core.model.MediaKind
 import fr.nexoratv.tv.ui.theme.NexoraBackdrop
 import fr.nexoratv.tv.ui.theme.NexoraGradient
-import fr.nexoratv.tv.ui.theme.NexoraInkDim
+import fr.nexoratv.tv.ui.theme.NexoraInk
 import fr.nexoratv.tv.ui.theme.NexoraInkFaint
 import fr.nexoratv.tv.ui.theme.NexoraPurple
 import fr.nexoratv.tv.ui.theme.NexoraSurface
@@ -108,7 +108,7 @@ fun CatalogScreen(
                     modifier = if (groups.size <= 1) Modifier.focusRequester(firstChip) else Modifier,
                 ) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Retour") }
                 Spacer(Modifier.width(12.dp))
-                Text(section.label, fontSize = 30.sp, fontWeight = FontWeight.Bold)
+                Text(section.label, fontSize = 30.sp, fontWeight = FontWeight.Bold, color = NexoraInk)
                 Spacer(Modifier.weight(1f))
                 Text(
                     "$sourceName · ${items.size}",

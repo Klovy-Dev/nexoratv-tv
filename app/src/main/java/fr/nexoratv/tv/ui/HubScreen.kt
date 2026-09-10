@@ -44,6 +44,7 @@ import fr.nexoratv.tv.core.Dates
 import fr.nexoratv.tv.ui.theme.NexoraBackdrop
 import fr.nexoratv.tv.ui.theme.NexoraBad
 import fr.nexoratv.tv.ui.theme.NexoraGradient
+import fr.nexoratv.tv.ui.theme.NexoraInk
 import fr.nexoratv.tv.ui.theme.NexoraInkDim
 import fr.nexoratv.tv.ui.theme.NexoraLine
 import fr.nexoratv.tv.ui.theme.NexoraOk
@@ -132,7 +133,7 @@ private fun HubCard(
         Column(Modifier.fillMaxSize().padding(24.dp)) {
             Icon(icon, null, tint = Color(0xFFB9C2D9), modifier = Modifier.size(40.dp))
             Spacer(Modifier.weight(1f))
-            Text(label, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            Text(label, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = NexoraInk)
             Text(sub, fontSize = 13.sp, color = NexoraInkDim)
         }
     }

@@ -1,6 +1,6 @@
 {
-  "versionCode": 4,
-  "versionName": "0.4.0",
-  "url": "https://github.com/Klovy-Dev/nexoratv-tv/releases/download/tv-v0.4.0/NexoraTV-TV.apk",
-  "notes": "Nouvel accueil : 3 blocs TV / Films / Séries.\n\n- Jaquettes de taille identique sur tous les écrans, cadrage propre, plus rien de coupé\n- Écran de chargement avec logo et progression par catégorie (fini l'écran noir)\n- Panneau Paramètres : version installée, recherche et installation des mises à jour, expiration de la playlist\n- Date de fin de playlist affichée sur l'accueil"
+  "versionCode": 5,
+  "versionName": "0.4.1",
+  "url": "https://github.com/Klovy-Dev/nexoratv-tv/releases/download/tv-v0.4.1/NexoraTV-TV.apk",
+  "notes": "Correctif d'affichage : les textes qui apparaissaient en noir (titres, blocs de l'accueil, catalogue, paramètres) sont maintenant clairs.\n\nInclut la 0.4.0 : nouvel accueil 3 blocs, jaquettes recadrées, écran de chargement, panneau Paramètres avec mises à jour."
 }
