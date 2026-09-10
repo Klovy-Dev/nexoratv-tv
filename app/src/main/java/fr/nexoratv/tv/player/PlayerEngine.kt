@@ -29,7 +29,11 @@ object PlayerEngine {
 
     fun build(context: Context, http: OkHttpClient): ExoPlayer {
         val renderers = NextRenderersFactory(context).apply {
-            setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
+            // MODE_ON (pas PREFER) : la vidéo passe par le décodeur MATÉRIEL
+            // (MediaCodec) ; FFmpeg ne sert qu'en secours et pour les codecs
+            // audio non gérés (AC3/EAC3/DTS…). PREFER faisait décoder la vidéo
+            // en logiciel -> saccades en FHD sur Fire TV Stick.
+            setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
             setEnableDecoderFallback(true)
         }
 
@@ -51,7 +55,9 @@ object PlayerEngine {
         val trackSelector = DefaultTrackSelector(context).apply {
             setParameters(
                 buildUponParameters()
-                    .setTunnelingEnabled(true)              // passthrough vidéo/audio sur TV
+                    // Tunneling désactivé : fragile sur Fire TV Stick
+                    // (écran noir / vidéo qui saute sur certains flux).
+                    .setTunnelingEnabled(false)
                     .setPreferredAudioLanguage("fra")
             )
         }
