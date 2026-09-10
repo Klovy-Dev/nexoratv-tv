@@ -76,6 +76,11 @@ android {
 
 kotlin {
     jvmToolchain(17)
+    compilerOptions {
+        // Media3 marque beaucoup d'API "UnstableApi" — opt-in global plutôt
+        // que d'annoter chaque fichier.
+        freeCompilerArgs.add("-opt-in=androidx.media3.common.util.UnstableApi")
+    }
 }
 
 dependencies {

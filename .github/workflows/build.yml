@@ -20,6 +20,11 @@ jobs:
 
       - name: Gradle
         uses: gradle/actions/setup-gradle@v4
+        with:
+          # Le cache restauré s'est corrompu sur un run interrompu
+          # (« Corrupt serialized resolution result »). Désactivé le temps
+          # de stabiliser, à réactiver ensuite.
+          cache-disabled: true
 
       - name: Runners CI = plus de RAM (le gradle.properties local est bridé 4 Go)
         run: |
