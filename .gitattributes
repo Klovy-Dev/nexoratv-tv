@@ -5,3 +5,5 @@ gradlew text eol=lf
 *.png binary
 *.jks binary
 *.keystore binary
+*.ttf binary
+*.otf binary
