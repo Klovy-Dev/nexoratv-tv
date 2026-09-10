@@ -1,6 +1,9 @@
 package fr.nexoratv.tv.data
 
 import android.content.Context
+import android.util.JsonReader
+import android.util.JsonToken
+import android.util.JsonWriter
 import fr.nexoratv.tv.core.DebugLog
 import fr.nexoratv.tv.core.Net
 import fr.nexoratv.tv.core.m3u.M3uParser
@@ -15,17 +18,16 @@ import fr.nexoratv.tv.core.xtream.XtreamClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.Request
-import org.json.JSONArray
-import org.json.JSONObject
 import java.io.File
 import java.util.zip.GZIPInputStream
 import java.util.zip.GZIPOutputStream
 
 /**
- * Charge la playlist d'une source (réseau) et la met en cache sur disque
- * (`<cache>/catalog_<id>.json.gz`). Tout le décodage est en
- * `Dispatchers.Default` — jamais sur le thread UI (le bug qui tuait la
- * version Flutter sur Fire TV Stick).
+ * Charge la playlist d'une source et la met en cache sur disque
+ * (`<cache>/catalog_<id>.json.gz`). Lecture **et** écriture en streaming
+ * (`JsonReader` / `JsonWriter` branchés sur le flux gzip) : on ne construit
+ * jamais tout le JSON en mémoire — c'est ce qui faisait planter le Fire TV
+ * Stick sur les gros catalogues (33k+ séries).
  */
 class CatalogRepository(private val context: Context) {
 
@@ -78,86 +80,152 @@ class CatalogRepository(private val context: Context) {
         }
     }
 
-    // ------------------------------------------------------------ cache
-    private suspend fun readCache(f: File): LoadedPlaylist? = withContext(Dispatchers.Default) {
+    // --------------------------------------------------------- cache (stream)
+    private suspend fun readCache(f: File): LoadedPlaylist? = withContext(Dispatchers.IO) {
         runCatching {
-            val text = GZIPInputStream(f.inputStream()).bufferedReader().use { it.readText() }
-            val root = JSONObject(text)
-            LoadedPlaylist(
-                live = root.optJSONArray("live").toChannels(),
-                movies = root.optJSONArray("movies").toChannels(),
-                series = root.optJSONArray("series").toSeries(),
-                expiresAt = if (root.isNull("expiresAt")) null else root.optLong("expiresAt"),
-            )
-        }.getOrNull()
+            JsonReader(GZIPInputStream(f.inputStream()).bufferedReader()).use { r ->
+                var expiresAt: Long? = null
+                val live = ArrayList<Channel>()
+                val movies = ArrayList<Channel>()
+                val series = ArrayList<Series>()
+                r.beginObject()
+                while (r.hasNext()) {
+                    when (r.nextName()) {
+                        "expiresAt" -> expiresAt =
+                            if (r.peek() == JsonToken.NULL) { r.nextNull(); null } else r.nextLong()
+                        "live" -> readChannels(r, live)
+                        "movies" -> readChannels(r, movies)
+                        "series" -> readSeries(r, series)
+                        else -> r.skipValue()
+                    }
+                }
+                r.endObject()
+                LoadedPlaylist(live, movies, series, expiresAt)
+            }
+        }.onFailure { DebugLog.line("cache illisible : ${it.javaClass.simpleName}") }.getOrNull()
     }
 
-    private suspend fun writeCache(f: File, pl: LoadedPlaylist) = withContext(Dispatchers.Default) {
+    private suspend fun writeCache(f: File, pl: LoadedPlaylist) = withContext(Dispatchers.IO) {
+        val tmp = File(f.parentFile, "${f.name}.tmp")
         runCatching {
-            val root = JSONObject()
-                .put("savedAt", System.currentTimeMillis())
-                .put("expiresAt", pl.expiresAt ?: JSONObject.NULL)
-                .put("live", pl.live.toJsonArray { it.toJson() })
-                .put("movies", pl.movies.toJsonArray { it.toJson() })
-                .put("series", pl.series.toJsonArray { it.toJson() })
-            GZIPOutputStream(f.outputStream()).bufferedWriter().use { it.write(root.toString()) }
+            JsonWriter(GZIPOutputStream(tmp.outputStream()).bufferedWriter()).use { w ->
+                w.beginObject()
+                w.name("savedAt").value(System.currentTimeMillis())
+                w.name("expiresAt")
+                if (pl.expiresAt != null) w.value(pl.expiresAt) else w.nullValue()
+                w.name("live").beginArray(); pl.live.forEach { writeChannel(w, it) }; w.endArray()
+                w.name("movies").beginArray(); pl.movies.forEach { writeChannel(w, it) }; w.endArray()
+                w.name("series").beginArray(); pl.series.forEach { writeSeries(w, it) }; w.endArray()
+                w.endObject()
+            }
+            if (f.exists()) f.delete()
+            if (!tmp.renameTo(f)) throw java.io.IOException("renommage cache impossible")
+        }.onFailure {
+            DebugLog.line("écriture cache échouée : ${it.javaClass.simpleName} ${it.message ?: ""}")
+            tmp.delete()
         }
         Unit
     }
 
-    private fun <T> List<T>.toJsonArray(map: (T) -> JSONObject) =
-        JSONArray().also { a -> forEach { a.put(map(it)) } }
-
-    private fun Channel.toJson() = JSONObject().apply {
-        put("id", id); put("name", name); put("url", url); put("number", number)
-        put("logo", logo); put("group", group); put("epgChannelId", epgChannelId)
-        put("streamId", streamId); put("kind", kind.name); put("rating", rating)
-        put("year", year); put("addedAt", addedAt); put("plot", plot); put("genre", genre)
-        put("containerExt", containerExt)
+    private fun writeChannel(w: JsonWriter, c: Channel) {
+        w.beginObject()
+        w.opt("id", c.id); w.opt("name", c.name); w.opt("url", c.url)
+        w.opt("number", c.number); w.opt("logo", c.logo); w.opt("group", c.group)
+        w.opt("epgChannelId", c.epgChannelId); w.opt("streamId", c.streamId)
+        w.opt("kind", c.kind.name); w.opt("rating", c.rating); w.opt("year", c.year)
+        w.opt("genre", c.genre); w.opt("containerExt", c.containerExt)
+        w.endObject()
     }
 
-    private fun Series.toJson() = JSONObject().apply {
-        put("id", id); put("seriesId", seriesId); put("name", name); put("cover", cover)
-        put("backdrop", backdrop); put("group", group); put("plot", plot); put("genre", genre)
-        put("cast", cast); put("director", director); put("rating", rating); put("year", year)
-        put("addedAt", addedAt)
+    private fun writeSeries(w: JsonWriter, s: Series) {
+        w.beginObject()
+        w.opt("id", s.id); w.opt("seriesId", s.seriesId); w.opt("name", s.name)
+        w.opt("cover", s.cover); w.opt("group", s.group); w.opt("genre", s.genre)
+        w.opt("rating", s.rating); w.opt("year", s.year)
+        w.endObject()
     }
 
-    private fun JSONArray?.toChannels(): List<Channel> {
-        val a = this ?: return emptyList()
-        return (0 until a.length()).mapNotNull { i ->
-            val o = a.optJSONObject(i) ?: return@mapNotNull null
-            Channel(
-                id = o.optString("id"), name = o.optString("name"), url = o.optString("url"),
-                number = o.optIntOrNull("number"), logo = o.optStringOrNull("logo"),
-                group = o.optStringOrNull("group"), epgChannelId = o.optStringOrNull("epgChannelId"),
-                streamId = o.optStringOrNull("streamId"),
-                kind = runCatching { MediaKind.valueOf(o.optString("kind")) }.getOrDefault(MediaKind.LIVE),
-                rating = o.optDoubleOrNull("rating"), year = o.optIntOrNull("year"),
-                addedAt = o.optLongOrNull("addedAt"), plot = o.optStringOrNull("plot"),
-                genre = o.optStringOrNull("genre"), containerExt = o.optStringOrNull("containerExt"),
+    private fun readChannels(r: JsonReader, out: MutableList<Channel>) {
+        r.beginArray()
+        while (r.hasNext()) {
+            var id = ""; var name = ""; var url = ""; var number: Int? = null
+            var logo: String? = null; var group: String? = null; var epg: String? = null
+            var streamId: String? = null; var kind = MediaKind.LIVE
+            var rating: Double? = null; var year: Int? = null
+            var genre: String? = null; var container: String? = null
+            r.beginObject()
+            while (r.hasNext()) {
+                when (r.nextName()) {
+                    "id" -> id = str(r).orEmpty()
+                    "name" -> name = str(r).orEmpty()
+                    "url" -> url = str(r).orEmpty()
+                    "number" -> number = intN(r)
+                    "logo" -> logo = str(r)
+                    "group" -> group = str(r)
+                    "epgChannelId" -> epg = str(r)
+                    "streamId" -> streamId = str(r)
+                    "kind" -> kind = runCatching { MediaKind.valueOf(str(r).orEmpty()) }.getOrDefault(MediaKind.LIVE)
+                    "rating" -> rating = dblN(r)
+                    "year" -> year = intN(r)
+                    "genre" -> genre = str(r)
+                    "containerExt" -> container = str(r)
+                    else -> r.skipValue()
+                }
+            }
+            r.endObject()
+            if (id.isNotEmpty()) out.add(
+                Channel(
+                    id = id, name = name, url = url, number = number, logo = logo,
+                    group = group, epgChannelId = epg, streamId = streamId, kind = kind,
+                    rating = rating, year = year, genre = genre, containerExt = container,
+                )
             )
         }
+        r.endArray()
     }
 
-    private fun JSONArray?.toSeries(): List<Series> {
-        val a = this ?: return emptyList()
-        return (0 until a.length()).mapNotNull { i ->
-            val o = a.optJSONObject(i) ?: return@mapNotNull null
-            Series(
-                id = o.optString("id"), seriesId = o.optString("seriesId"), name = o.optString("name"),
-                cover = o.optStringOrNull("cover"), backdrop = o.optStringOrNull("backdrop"),
-                group = o.optStringOrNull("group"), plot = o.optStringOrNull("plot"),
-                genre = o.optStringOrNull("genre"), cast = o.optStringOrNull("cast"),
-                director = o.optStringOrNull("director"), rating = o.optDoubleOrNull("rating"),
-                year = o.optIntOrNull("year"), addedAt = o.optLongOrNull("addedAt"),
+    private fun readSeries(r: JsonReader, out: MutableList<Series>) {
+        r.beginArray()
+        while (r.hasNext()) {
+            var id = ""; var seriesId = ""; var name = ""
+            var cover: String? = null; var group: String? = null; var genre: String? = null
+            var rating: Double? = null; var year: Int? = null
+            r.beginObject()
+            while (r.hasNext()) {
+                when (r.nextName()) {
+                    "id" -> id = str(r).orEmpty()
+                    "seriesId" -> seriesId = str(r).orEmpty()
+                    "name" -> name = str(r).orEmpty()
+                    "cover" -> cover = str(r)
+                    "group" -> group = str(r)
+                    "genre" -> genre = str(r)
+                    "rating" -> rating = dblN(r)
+                    "year" -> year = intN(r)
+                    else -> r.skipValue()
+                }
+            }
+            r.endObject()
+            if (id.isNotEmpty()) out.add(
+                Series(
+                    id = id, seriesId = seriesId, name = name, cover = cover,
+                    group = group, genre = genre, rating = rating, year = year,
+                )
             )
         }
+        r.endArray()
     }
 
-    private fun JSONObject.optStringOrNull(k: String) =
-        if (isNull(k)) null else optString(k).ifEmpty { null }
-    private fun JSONObject.optIntOrNull(k: String) = if (isNull(k)) null else optInt(k)
-    private fun JSONObject.optLongOrNull(k: String) = if (isNull(k)) null else optLong(k)
-    private fun JSONObject.optDoubleOrNull(k: String) = if (isNull(k)) null else optDouble(k)
+    // -------------------------------------------------------------- helpers
+    private fun JsonWriter.opt(name: String, v: String?) { name(name); value(v) }
+    private fun JsonWriter.opt(name: String, v: Int?) { name(name); if (v != null) value(v.toLong()) else nullValue() }
+    private fun JsonWriter.opt(name: String, v: Double?) { name(name); if (v != null) value(v) else nullValue() }
+
+    private fun str(r: JsonReader): String? =
+        if (r.peek() == JsonToken.NULL) { r.nextNull(); null } else r.nextString().ifEmpty { null }
+
+    private fun intN(r: JsonReader): Int? =
+        if (r.peek() == JsonToken.NULL) { r.nextNull(); null } else r.nextInt()
+
+    private fun dblN(r: JsonReader): Double? =
+        if (r.peek() == JsonToken.NULL) { r.nextNull(); null } else r.nextDouble()
 }

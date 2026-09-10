@@ -289,9 +289,6 @@ class XtreamClient(
                     kind = kind,
                     rating = parseRating(s["rating"]),
                     year = parseYear(s["year"].orEmpty().ifEmpty { s["releaseDate"].orEmpty() }),
-                    addedAt = parseEpoch(s["added"]),
-                    plot = if (kind == MediaKind.MOVIE)
-                        nullIfEmpty(firstNonEmpty(s, "plot", "description", "overview")) else null,
                     genre = if (kind == MediaKind.MOVIE) nullIfEmpty(s["genre"]) else null,
                     containerExt = if (kind == MediaKind.MOVIE) container else null,
                 )
@@ -314,20 +311,18 @@ class XtreamClient(
             for (s in list) {
                 val sid = (s["series_id"] ?: s["id"] ?: s["num"]).orEmpty()
                 if (sid.isEmpty() || sid == "null") continue
+                // On ne garde que le strict nécessaire à la grille : sur 30k+
+                // séries, embarquer plot/cast/director sature la mémoire du
+                // Fire TV Stick. Le détail sera récupéré via get_series_info.
                 acc += Series(
                     id = "series_$sid",
                     seriesId = sid,
                     name = s["name"]?.trim().orEmpty().ifEmpty { "Sans nom" },
                     cover = nullIfEmpty(s["cover"]),
-                    backdrop = nullIfEmpty(s["backdrop_path"]),
                     group = names[s["category_id"]] ?: "Non classé",
-                    plot = nullIfEmpty(s["plot"]),
                     genre = nullIfEmpty(s["genre"]),
-                    cast = nullIfEmpty(s["cast"]),
-                    director = nullIfEmpty(s["director"]),
                     rating = parseRating(s["rating"]),
                     year = parseYear(s["releaseDate"].orEmpty().ifEmpty { s["release_date"].orEmpty() }),
-                    addedAt = parseEpoch(s["last_modified"]),
                 )
             }
             sortByCategory(acc, rank, names) { it.groupOrDefault }
@@ -402,14 +397,6 @@ class XtreamClient(
             compareBy({ rankByName[groupOf(it.first)] ?: big }, { it.second })
         )
         for (i in items.indices) items[i] = sorted[i].first
-    }
-
-    private fun firstNonEmpty(m: Map<String, String>, vararg keys: String): String {
-        for (k in keys) {
-            val v = m[k].orEmpty()
-            if (v.isNotEmpty() && v != "null") return v
-        }
-        return ""
     }
 
     companion object {
