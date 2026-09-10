@@ -61,10 +61,9 @@ jobs:
       # signé par un keystore debug auto-généré différent → les mises à jour
       # intégrées refusent de s'installer (signatures différentes). Ce keystore
       # est un keystore *debug* (mot de passe public « android »), pas secret.
+      # `app/build.gradle.kts` pointe explicitement sur `ci/debug.keystore`.
       - name: Keystore debug partagé
-        run: |
-          mkdir -p ~/.android
-          base64 -d ci/debug.keystore.b64 > ~/.android/debug.keystore
+        run: base64 -d ci/debug.keystore.b64 > ci/debug.keystore
 
       - name: Clé de signature release (si présente)
         if: env.KEYSTORE_B64 != ''

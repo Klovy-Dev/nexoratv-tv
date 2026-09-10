@@ -1,6 +1,6 @@
 {
-  "versionCode": 5,
-  "versionName": "0.4.1",
-  "url": "https://github.com/Klovy-Dev/nexoratv-tv/releases/download/tv-v0.4.1/NexoraTV-TV.apk",
-  "notes": "- Textes qui apparaissaient en noir (titres, accueil, catalogue, paramètres) : corrigés\n- Chargement des séries fiabilisé : lecture en flux du catalogue (ne sature plus la mémoire du Fire TV Stick sur les grosses listes), timeouts élargis\n- Paramètres → Diagnostic : journal de chargement pour voir ce qui se passe\n\nInclut la 0.4.0 : accueil 3 blocs, jaquettes recadrées, écran de chargement, mises à jour intégrées."
+  "versionCode": 6,
+  "versionName": "0.4.2",
+  "url": "https://github.com/Klovy-Dev/nexoratv-tv/releases/download/tv-v0.4.2/NexoraTV-TV.apk",
+  "notes": "Signature de l'app enfin stable entre les versions : à partir de maintenant, les mises à jour s'installent sans désinstaller (une dernière désinstallation nécessaire pour passer à cette 0.4.2).\n\nInclut 0.4.1 : textes clairs, séries fiabilisées (streaming), Paramètres → Diagnostic."
 }

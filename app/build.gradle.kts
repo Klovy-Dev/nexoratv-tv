@@ -21,12 +21,28 @@ android {
         applicationId = "fr.nexoratv.tv"
         minSdk = 23            // Android 6+ (couvre les Fire TV Stick récents)
         targetSdk = 35
-        versionCode = 5
-        versionName = "0.4.1"
+        versionCode = 6
+        versionName = "0.4.2"
         vectorDrawables.useSupportLibrary = true
     }
 
     signingConfigs {
+        // Signature debug STABLE entre les builds CI : sans ça, chaque run est
+        // signé par un keystore debug auto-généré différent → les mises à jour
+        // refusent de s'installer (« application non installée »). Le fichier
+        // `ci/debug.keystore` est décodé par la CI depuis `ci/debug.keystore.b64`
+        // (keystore *debug*, mot de passe public « android » — pas un secret).
+        // Absent en local → AGP retombe sur son keystore debug par défaut.
+        getByName("debug") {
+            val shared = rootProject.file("ci/debug.keystore")
+            if (shared.exists()) {
+                storeFile = shared
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+            }
+        }
+
         create("release") {
             if (keystoreProps.getProperty("storeFile") != null) {
                 storeFile = rootProject.file(keystoreProps.getProperty("storeFile"))
