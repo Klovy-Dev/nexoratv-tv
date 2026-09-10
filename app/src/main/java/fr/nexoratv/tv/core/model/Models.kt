@@ -90,8 +90,21 @@ data class LoadedPlaylist(
     val live: List<Channel> = emptyList(),
     val movies: List<Channel> = emptyList(),
     val series: List<Series> = emptyList(),
+    /** Fin d'abonnement (epoch ms) si le serveur la fournit (Xtream). */
+    val expiresAt: Long? = null,
 ) {
     val isEmpty get() = live.isEmpty() && movies.isEmpty() && series.isEmpty()
 }
+
+/**
+ * Avancement du chargement d'un catalogue, pour l'écran de démarrage.
+ * Un compteur non nul = catégorie terminée ; `connected` = serveur joint.
+ */
+data class LoadProgress(
+    val connected: Boolean = false,
+    val live: Int? = null,
+    val movies: Int? = null,
+    val series: Int? = null,
+)
 
 const val UNCATEGORIZED = "Non classé"

@@ -26,6 +26,15 @@ val NexoraSurfaceHi = Color(0xFF1E2740)
 
 val NexoraGradient = Brush.linearGradient(listOf(NexoraPink, NexoraPurple, NexoraBlue))
 
+// Texte / états — mêmes valeurs que la maquette validée.
+val NexoraInk = Color(0xFFEAEEF7)
+val NexoraInkDim = Color(0xFF909BB6)
+val NexoraInkFaint = Color(0xFF5B6684)
+val NexoraLine = Color(0xFF1B2237)
+val NexoraOk = Color(0xFF37D9A0)
+val NexoraWarn = Color(0xFFFFB454)
+val NexoraBad = Color(0xFFFF6B6B)
+
 /** Fond général : bleu nuit avec une lueur violette en haut à gauche. */
 val NexoraBackdrop = Brush.radialGradient(
     colors = listOf(Color(0xFF1C1442), NexoraNight),

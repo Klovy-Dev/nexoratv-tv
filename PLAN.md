@@ -43,8 +43,11 @@ fonctionnalités de NexoraTV.
 - [ ] **M4 — Détail & séries** : fiche film/série, saisons/épisodes, favoris,
       « Reprendre », recherche.
 - [ ] **M5 — EPG** : guide XMLTV + « en cours » sur les chaînes.
-- [ ] **M6 — Réglages** : lecteur (tampon, sous-titres), contrôle parental,
-      à propos, MAJ intégrées (manifeste `update.json`).
+- [~] **M6 — Réglages** : panneau Paramètres (v0.4) — version, **MAJ intégrées**
+      (`update.json` racine du dépôt → download APK → `Intent` d'install,
+      `FileProvider` + keystore debug partagé `ci/debug.keystore.b64`),
+      expiration playlist, changer de playlist. Reste : qualité vidéo,
+      sous-titres par défaut, écran de démarrage, vider le cache.
 - [ ] **M7 — Distribution** : signature, CI GitHub Actions, tag `tv-vX.Y.Z`,
       lien `nexoratv.fr/tv.apk`.
 

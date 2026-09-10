@@ -2,6 +2,7 @@ package fr.nexoratv.tv.core.xtream
 
 import fr.nexoratv.tv.core.model.Channel
 import fr.nexoratv.tv.core.model.Episode
+import fr.nexoratv.tv.core.model.LoadProgress
 import fr.nexoratv.tv.core.model.LoadedPlaylist
 import fr.nexoratv.tv.core.model.MediaKind
 import fr.nexoratv.tv.core.model.PlaylistSource
@@ -119,26 +120,40 @@ class XtreamClient(
     }
 
     // --------------------------------------------------------- Chargement
-    suspend fun loadAll(): LoadedPlaylist = coroutineScope {
-        authenticate()
+    suspend fun loadAll(onProgress: (LoadProgress) -> Unit = {}): LoadedPlaylist = coroutineScope {
+        val progLock = Any()
+        var prog = LoadProgress()
+        // `movies` et `series` se terminent en parallèle : accès synchronisé.
+        fun emit(f: (LoadProgress) -> LoadProgress) {
+            val next = synchronized(progLock) { prog = f(prog); prog }
+            onProgress(next)
+        }
+
+        val account = authenticate()
+        emit { it.copy(connected = true) }
+
         // Live d'abord (fait échouer vite si le compte pose problème), puis
         // films + séries en parallèle.
         val live = fetchStreams("get_live_categories", "get_live_streams", "live", liveExt, MediaKind.LIVE)
         if (live.isEmpty()) throw XtreamException("Aucune chaîne renvoyée par le serveur.")
+        emit { it.copy(live = live.size) }
+
         val moviesJob = async {
             runCatching {
                 fetchStreams("get_vod_categories", "get_vod_streams", "movie", null, MediaKind.MOVIE)
             }.onFailure { log("films : échec — ${it.message}") }.getOrDefault(emptyList())
+                .also { m -> emit { p -> p.copy(movies = m.size) } }
         }
         val seriesJob = async {
             runCatching { fetchSeries() }
                 .onFailure { log("séries : échec — ${it.message}") }
                 .getOrDefault(emptyList())
+                .also { s -> emit { p -> p.copy(series = s.size) } }
         }
         val movies = moviesJob.await()
         val series = seriesJob.await()
         log("terminé : ${live.size} chaînes · ${movies.size} films · ${series.size} séries")
-        LoadedPlaylist(live, movies, series)
+        LoadedPlaylist(live, movies, series, expiresAt = account.expiresAt)
     }
 
     private suspend fun fetchStreams(

@@ -4,6 +4,7 @@ import android.content.Context
 import fr.nexoratv.tv.core.Net
 import fr.nexoratv.tv.core.m3u.M3uParser
 import fr.nexoratv.tv.core.model.Channel
+import fr.nexoratv.tv.core.model.LoadProgress
 import fr.nexoratv.tv.core.model.LoadedPlaylist
 import fr.nexoratv.tv.core.model.MediaKind
 import fr.nexoratv.tv.core.model.PlaylistSource
@@ -33,14 +34,18 @@ class CatalogRepository(private val context: Context) {
         File(context.cacheDir, "catalog_$sourceId.json.gz")
 
     /** Cache frais → rendu ; sinon réseau puis cache. */
-    suspend fun load(source: PlaylistSource, forceRefresh: Boolean = false): LoadedPlaylist {
+    suspend fun load(
+        source: PlaylistSource,
+        forceRefresh: Boolean = false,
+        onProgress: (LoadProgress) -> Unit = {},
+    ): LoadedPlaylist {
         val f = cacheFile(source.id)
         if (!forceRefresh && f.exists() &&
             System.currentTimeMillis() - f.lastModified() < cacheMaxAgeMs
         ) {
             readCache(f)?.let { return it }
         }
-        val fresh = fetch(source)
+        val fresh = fetch(source, onProgress)
         writeCache(f, fresh)
         return fresh
     }
@@ -48,12 +53,19 @@ class CatalogRepository(private val context: Context) {
     suspend fun cachedOrNull(source: PlaylistSource): LoadedPlaylist? =
         cacheFile(source.id).takeIf { it.exists() }?.let { readCache(it) }
 
-    private suspend fun fetch(source: PlaylistSource): LoadedPlaylist = when (source.kind) {
-        SourceKind.XTREAM -> XtreamClient(source, Net.http).loadAll()
+    private suspend fun fetch(
+        source: PlaylistSource,
+        onProgress: (LoadProgress) -> Unit,
+    ): LoadedPlaylist = when (source.kind) {
+        SourceKind.XTREAM -> XtreamClient(source, Net.http).loadAll(onProgress)
         SourceKind.M3U_URL -> withContext(Dispatchers.IO) {
+            onProgress(LoadProgress(connected = false))
             val body = Net.http.newCall(Request.Builder().url(source.m3uUrl!!).build())
                 .execute().use { it.body?.string().orEmpty() }
-            LoadedPlaylist(live = withContext(Dispatchers.Default) { M3uParser.parse(body) })
+            onProgress(LoadProgress(connected = true))
+            val channels = withContext(Dispatchers.Default) { M3uParser.parse(body) }
+            onProgress(LoadProgress(connected = true, live = channels.size))
+            LoadedPlaylist(live = channels)
         }
     }
 
@@ -66,6 +78,7 @@ class CatalogRepository(private val context: Context) {
                 live = root.optJSONArray("live").toChannels(),
                 movies = root.optJSONArray("movies").toChannels(),
                 series = root.optJSONArray("series").toSeries(),
+                expiresAt = if (root.isNull("expiresAt")) null else root.optLong("expiresAt"),
             )
         }.getOrNull()
     }
@@ -74,6 +87,7 @@ class CatalogRepository(private val context: Context) {
         runCatching {
             val root = JSONObject()
                 .put("savedAt", System.currentTimeMillis())
+                .put("expiresAt", pl.expiresAt ?: JSONObject.NULL)
                 .put("live", pl.live.toJsonArray { it.toJson() })
                 .put("movies", pl.movies.toJsonArray { it.toJson() })
                 .put("series", pl.series.toJsonArray { it.toJson() })
