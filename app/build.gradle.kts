@@ -2,7 +2,10 @@ import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.ksp)
+    alias(libs.plugins.hilt)
 }
 
 // Signature release : lit keystore.properties (non versionné). Absent =
@@ -18,7 +21,7 @@ android {
 
     defaultConfig {
         applicationId = "fr.nexoratv.tv"
-        minSdk = 22            // Fire OS 5 (Fire TV Stick 2016)
+        minSdk = 23            // Android 6+ (couvre les Fire TV Stick récents)
         targetSdk = 35
         versionCode = 1
         versionName = "0.1.0"
@@ -59,12 +62,16 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+    kotlinOptions {
+        jvmTarget = "17"
+        // Media3 marque beaucoup d'API "UnstableApi" — opt-in global.
+        freeCompilerArgs += "-opt-in=androidx.media3.common.util.UnstableApi"
+    }
 
     buildFeatures {
         compose = true
         buildConfig = true
     }
-
 
     packaging {
         resources.excludes += setOf(
@@ -74,14 +81,7 @@ android {
     }
 }
 
-kotlin {
-    jvmToolchain(17)
-    compilerOptions {
-        // Media3 marque beaucoup d'API "UnstableApi" — opt-in global plutôt
-        // que d'annoter chaque fichier.
-        freeCompilerArgs.add("-opt-in=androidx.media3.common.util.UnstableApi")
-    }
-}
+ksp { arg("room.schemaLocation", "$projectDir/schemas") }
 
 dependencies {
     implementation(libs.androidx.core.ktx)
@@ -96,6 +96,7 @@ dependencies {
     implementation(libs.compose.ui.tooling.preview)
     implementation(libs.compose.material3)
     implementation(libs.compose.material.icons.extended)
+    implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.tv.material)
     debugImplementation(libs.compose.ui.tooling)
 
@@ -106,6 +107,14 @@ dependencies {
     implementation(libs.media3.session)
     implementation(libs.nextlib.media3ext)
     implementation(libs.nextlib.mediainfo)
+
+    implementation(libs.room.runtime)
+    implementation(libs.room.ktx)
+    ksp(libs.room.compiler)
+
+    implementation(libs.hilt.android)
+    ksp(libs.hilt.compiler)
+    implementation(libs.hilt.navigation.compose)
 
     implementation(libs.okhttp)
     implementation(libs.okhttp.logging)
