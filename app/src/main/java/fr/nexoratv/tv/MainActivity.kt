@@ -3,6 +3,7 @@ package fr.nexoratv.tv
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
@@ -19,7 +20,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import fr.nexoratv.tv.core.model.Channel
 import fr.nexoratv.tv.player.PlayerActivity
 import fr.nexoratv.tv.player.PlayerQueue
-import fr.nexoratv.tv.ui.AddSourceScreen
+import fr.nexoratv.tv.ui.ConnectScreen
 import fr.nexoratv.tv.ui.HomeScreen
 import fr.nexoratv.tv.ui.theme.NexoraTheme
 
@@ -49,12 +50,18 @@ class MainActivity : ComponentActivity() {
 private fun Root(onPlay: (sourceId: String, queue: List<Channel>, startIndex: Int) -> Unit) {
     val vm: AppViewModel = viewModel()
     val screen by vm.screen.collectAsState()
+    val sources by vm.sources.collectAsState()
+
+    // Sur l'écran Connexion : Retour revient à l'accueil si un compte existe.
+    BackHandler(enabled = screen == Screen.Connect && sources.isNotEmpty()) {
+        vm.goHome()
+    }
 
     when (screen) {
         Screen.Loading -> Box(Modifier.fillMaxSize(), Alignment.Center) {
             CircularProgressIndicator()
         }
-        Screen.AddSource -> AddSourceScreen(vm)
+        Screen.Connect -> ConnectScreen(vm)
         Screen.Home -> HomeScreen(vm, onPlay)
     }
 }

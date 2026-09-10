@@ -3,9 +3,13 @@ package fr.nexoratv.tv
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import fr.nexoratv.tv.core.DeviceId
 import fr.nexoratv.tv.core.Net
+import fr.nexoratv.tv.core.mac.MacPortalClient
+import fr.nexoratv.tv.core.mac.MacPortalException
 import fr.nexoratv.tv.core.model.LoadedPlaylist
 import fr.nexoratv.tv.core.model.PlaylistSource
+import fr.nexoratv.tv.core.model.SourceKind
 import fr.nexoratv.tv.core.xtream.XtreamClient
 import fr.nexoratv.tv.core.xtream.XtreamException
 import fr.nexoratv.tv.data.CatalogRepository
@@ -17,7 +21,7 @@ import kotlinx.coroutines.launch
 
 sealed interface Screen {
     data object Loading : Screen
-    data object AddSource : Screen
+    data object Connect : Screen
     data object Home : Screen
 }
 
@@ -33,6 +37,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val store = SourceStore.get(app)
     private val catalog = CatalogRepository(app)
 
+    /** Adresse MAC virtuelle unique de cet appareil (portail d'activation). */
+    val deviceMac: String = DeviceId.mac(app)
+
     private val _screen = MutableStateFlow<Screen>(Screen.Loading)
     val screen: StateFlow<Screen> = _screen.asStateFlow()
 
@@ -46,7 +53,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             store.load()
             if (store.sources.value.isEmpty()) {
-                _screen.value = Screen.AddSource
+                _screen.value = Screen.Connect
             } else {
                 _screen.value = Screen.Home
                 loadCatalog()
@@ -54,26 +61,36 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun goAddSource() { _screen.value = Screen.AddSource }
+    fun goConnect() { _screen.value = Screen.Connect }
     fun goHome() { _screen.value = Screen.Home }
 
-    /** Valide + enregistre une source Xtream, puis charge le catalogue. */
+    // --------------------------------------------------- Activation par MAC
+    fun activateByMac(onResult: (ok: Boolean, error: String?) -> Unit) {
+        viewModelScope.launch {
+            val resolved = try {
+                MacPortalClient.resolve(deviceMac)
+            } catch (e: MacPortalException) {
+                onResult(false, e.message); return@launch
+            }
+            store.add(resolved)
+            onResult(true, null)
+            _screen.value = Screen.Home
+            loadCatalog(forceRefresh = true)
+        }
+    }
+
+    // ------------------------------------------------------ Xtream manuel
     fun addXtream(
-        name: String,
-        host: String,
-        username: String,
-        password: String,
+        name: String, host: String, username: String, password: String,
         onResult: (ok: Boolean, error: String?) -> Unit,
     ) {
         viewModelScope.launch {
-            val normHost = normalizeHost(host)
             val src = PlaylistSource(
                 name = name.ifBlank { username },
-                kind = fr.nexoratv.tv.core.model.SourceKind.XTREAM,
-                host = normHost, username = username.trim(), password = password.trim(),
+                kind = SourceKind.XTREAM,
+                host = normalizeHost(host), username = username.trim(), password = password.trim(),
             )
-            val err = runCatching { XtreamClient(src, Net.http).authenticate() }
-                .exceptionOrNull()
+            val err = runCatching { XtreamClient(src, Net.http).authenticate() }.exceptionOrNull()
             if (err != null) {
                 onResult(false, (err as? XtreamException)?.message ?: err.message ?: "Échec de connexion")
                 return@launch
@@ -85,11 +102,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // ------------------------------------------------------------ Catalogue
     fun loadCatalog(forceRefresh: Boolean = false) {
-        val src = store.selected ?: return
+        val base = store.selected ?: return
         viewModelScope.launch {
             _catalog.value = CatalogState.Loading
-            // Sert le cache tout de suite s'il existe (perçu instantané).
+            // Source activée par MAC : on re-résout auprès du portail (l'admin
+            // a pu changer le lien). En cas d'échec, on garde la config connue.
+            val src = if (base.activationMac != null) {
+                runCatching { MacPortalClient.resolve(base.activationMac!!, base.id) }
+                    .getOrDefault(base)
+                    .also { if (it != base) store.add(it) }
+            } else base
+
             if (!forceRefresh) {
                 catalog.cachedOrNull(src)?.let { _catalog.value = CatalogState.Ready(it) }
             }

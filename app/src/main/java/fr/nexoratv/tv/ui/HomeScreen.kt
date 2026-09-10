@@ -48,6 +48,7 @@ import androidx.tv.material3.Tab
 import androidx.tv.material3.TabRow
 import androidx.tv.material3.Text
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Refresh
 import coil3.compose.AsyncImage
 import fr.nexoratv.tv.AppViewModel
@@ -73,7 +74,9 @@ fun HomeScreen(
     Box(Modifier.fillMaxSize().background(NexoraBackdrop)) {
         when (val s = state) {
             is CatalogState.Ready ->
-                Catalog(s.playlist, sourceId, sourceName, onPlay) { vm.loadCatalog(true) }
+                Catalog(s.playlist, sourceId, sourceName, onPlay,
+                    onRefresh = { vm.loadCatalog(true) },
+                    onAccount = { vm.goConnect() })
             is CatalogState.Error -> StatusView("Chargement impossible", s.message) {
                 androidx.tv.material3.Button(onClick = { vm.loadCatalog(true) }) { Text("Réessayer") }
             }
@@ -106,6 +109,7 @@ private fun Catalog(
     sourceName: String,
     onPlay: (String, List<Channel>, Int) -> Unit,
     onRefresh: () -> Unit,
+    onAccount: () -> Unit,
 ) {
     var section by remember { mutableStateOf(Section.TV) }
     var groupIndex by remember { mutableIntStateOf(0) }
@@ -132,6 +136,7 @@ private fun Catalog(
             Text(sourceName, color = MaterialTheme.colorScheme.onSurface.copy(alpha = .55f))
             Spacer(Modifier.weight(1f))
             IconButton(onClick = onRefresh) { Icon(Icons.Default.Refresh, "Rafraîchir") }
+            IconButton(onClick = onAccount) { Icon(Icons.Default.AccountCircle, "Compte") }
         }
 
         Spacer(Modifier.height(18.dp))
