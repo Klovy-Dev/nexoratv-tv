@@ -140,23 +140,14 @@ private fun HubCard(
 
 @Composable
 private fun ExpiryPill(expiresAt: Long?) {
-    val text: String
-    val dot: Color?
-    when {
-        expiresAt == null -> {
-            text = "Playlist M3U"; dot = null
-        }
-        expiresAt < System.currentTimeMillis() -> {
-            text = "Playlist expirée"; dot = NexoraBad
-        }
+    val (text, dot) = when {
+        expiresAt == null -> "Playlist M3U" to null
+        expiresAt < System.currentTimeMillis() -> "Playlist expirée" to NexoraBad
         else -> {
             val days = Dates.daysUntil(expiresAt)
             val date = Dates.frenchDate(expiresAt)
-            if (days <= 7) {
-                text = "Expire dans $days j — le $date"; dot = NexoraWarn
-            } else {
-                text = "Playlist active — expire le $date"; dot = NexoraOk
-            }
+            if (days <= 7) "Expire dans $days j — le $date" to NexoraWarn
+            else "Playlist active — expire le $date" to NexoraOk
         }
     }
     Row(
