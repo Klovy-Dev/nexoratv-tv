@@ -1,5 +1,6 @@
 package fr.nexoratv.tv.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,12 +20,21 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Icon as M3Icon
+import androidx.compose.material3.IconButton as M3IconButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text as M3Text
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -37,6 +47,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -48,7 +59,6 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.IconButton
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
-import androidx.compose.foundation.BorderStroke
 import coil3.compose.AsyncImage
 import fr.nexoratv.tv.Section
 import fr.nexoratv.tv.core.model.Channel
@@ -57,13 +67,14 @@ import fr.nexoratv.tv.core.model.MediaKind
 import fr.nexoratv.tv.ui.theme.NexoraBackdrop
 import fr.nexoratv.tv.ui.theme.NexoraGradient
 import fr.nexoratv.tv.ui.theme.NexoraInk
+import fr.nexoratv.tv.ui.theme.NexoraInkDim
 import fr.nexoratv.tv.ui.theme.NexoraInkFaint
 import fr.nexoratv.tv.ui.theme.NexoraPurple
 import fr.nexoratv.tv.ui.theme.NexoraSurface
 import fr.nexoratv.tv.ui.theme.NexoraSurfaceHi
 
-/** Grille d'une section (TV / Films / Séries) : colonnes fixes selon l'écran,
- *  cadre de jaquette verrouillé, titre sur 2 lignes réservées. */
+/** Grille d'une section (TV / Films / Séries) : recherche, catégories,
+ *  colonnes fixes selon l'écran, cadre de jaquette verrouillé. */
 @Composable
 fun CatalogScreen(
     pl: LoadedPlaylist,
@@ -71,6 +82,8 @@ fun CatalogScreen(
     sourceId: String,
     sourceName: String,
     onPlay: (String, List<Channel>, Int) -> Unit,
+    onOpenMovie: (Channel) -> Unit,
+    onOpenSeries: (seriesId: String, name: String, cover: String?) -> Unit,
     onBack: () -> Unit,
 ) {
     val items: List<Channel> = remember(pl, section) {
@@ -79,48 +92,81 @@ fun CatalogScreen(
             Section.MOVIES -> pl.movies
             Section.SERIES -> pl.series.map {
                 Channel(
-                    id = it.id, name = it.name, url = "",
+                    id = it.id, name = it.name, url = "", streamId = it.seriesId,
                     logo = it.cover, group = it.group, kind = MediaKind.SERIES,
                 )
             }
         }
     }
+    val lowerNames = remember(items) { items.map { it.name.lowercase() } }
+
+    var query by remember(section) { mutableStateOf("") }
     var groupIndex by remember(section) { mutableIntStateOf(0) }
+
     val groups = remember(items) {
         listOf<String?>(null) + items.map { it.groupOrDefault }.distinct()
     }
     val group = groups.getOrElse(groupIndex) { null }
-    val visible = remember(items, group) {
-        if (group == null) items else items.filter { it.groupOrDefault == group }
+
+    val searching = query.trim().length >= 2
+    val visible = remember(items, group, query) {
+        if (searching) {
+            val q = query.trim().lowercase()
+            items.filterIndexed { i, _ -> lowerNames[i].contains(q) }
+        } else if (group == null) items else items.filter { it.groupOrDefault == group }
     }
 
     val widthDp = LocalConfiguration.current.screenWidthDp
     val columns = gridColumns(section, widthDp)
 
+    // Focus initial : 1re catégorie (jamais le champ de recherche — sinon le
+    // clavier TV s'ouvre tout seul à l'arrivée sur l'écran).
     val firstChip = remember { FocusRequester() }
     LaunchedEffect(section) { runCatching { firstChip.requestFocus() } }
 
     Box(Modifier.fillMaxSize().background(NexoraBackdrop)) {
         Column(Modifier.fillMaxSize().padding(horizontal = 40.dp, vertical = 28.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(
-                    onClick = onBack,
-                    modifier = if (groups.size <= 1) Modifier.focusRequester(firstChip) else Modifier,
-                ) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Retour") }
+                IconButton(onClick = onBack, modifier = Modifier.focusRequester(backFocus)) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Retour")
+                }
                 Spacer(Modifier.width(12.dp))
                 Text(section.label, fontSize = 30.sp, fontWeight = FontWeight.Bold, color = NexoraInk)
                 Spacer(Modifier.weight(1f))
                 Text(
-                    "$sourceName · ${items.size}",
+                    "$sourceName · ${if (searching) visible.size else items.size}",
                     color = NexoraInkFaint,
                     fontSize = 13.sp,
                     fontFamily = FontFamily.Monospace,
                 )
             }
 
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(14.dp))
 
-            if (groups.size > 1) {
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                leadingIcon = { M3Icon(Icons.Default.Search, null) },
+                trailingIcon = {
+                    if (query.isNotEmpty()) {
+                        M3IconButton(onClick = { query = "" }) { M3Icon(Icons.Default.Close, "Effacer") }
+                    }
+                },
+                placeholder = { M3Text("Rechercher dans ${section.label.lowercase()}") },
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = NexoraSurface,
+                    unfocusedContainerColor = NexoraSurface,
+                    focusedTextColor = NexoraInk,
+                    unfocusedTextColor = NexoraInk,
+                ),
+            )
+
+            Spacer(Modifier.height(14.dp))
+
+            if (!searching && groups.size > 1) {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(groups.size) { i ->
                         Chip(
@@ -135,7 +181,10 @@ fun CatalogScreen(
 
             if (visible.isEmpty()) {
                 Box(Modifier.fillMaxSize(), Alignment.Center) {
-                    Text("Rien ici.", color = NexoraInkFaint)
+                    Text(
+                        if (searching) "Aucun résultat pour « ${query.trim()} »." else "Rien ici.",
+                        color = NexoraInkFaint,
+                    )
                 }
             } else {
                 LazyVerticalGrid(
@@ -146,9 +195,11 @@ fun CatalogScreen(
                 ) {
                     items(visible, key = { it.id }) { ch ->
                         PosterCard(ch) {
-                            if (ch.kind == MediaKind.SERIES) return@PosterCard
-                            val queue = if (ch.kind == MediaKind.LIVE) visible else listOf(ch)
-                            onPlay(sourceId, queue, queue.indexOf(ch).coerceAtLeast(0))
+                            when (ch.kind) {
+                                MediaKind.SERIES -> onOpenSeries(ch.streamId.orEmpty(), ch.name, ch.logo)
+                                MediaKind.MOVIE -> onOpenMovie(ch)
+                                MediaKind.LIVE -> onPlay(sourceId, visible, visible.indexOf(ch).coerceAtLeast(0))
+                            }
                         }
                     }
                 }
@@ -157,8 +208,6 @@ fun CatalogScreen(
     }
 }
 
-/** Téléphone / tablette / TV : nombre de colonnes fixe (les jaquettes ne
- *  changent plus de taille d'un écran à l'autre). */
 private fun gridColumns(section: Section, widthDp: Int): Int {
     val big = widthDp >= 900
     val med = widthDp >= 600
@@ -190,6 +239,7 @@ private fun Chip(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             fontSize = 13.sp,
+            color = NexoraInk,
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
         )
     }
@@ -223,7 +273,7 @@ private fun PosterCard(ch: Channel, onClick: () -> Unit) {
                         ch.name.take(1).uppercase(),
                         fontSize = 26.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFF6B7794),
+                        color = NexoraInkDim,
                     )
                 } else {
                     AsyncImage(
@@ -236,8 +286,6 @@ private fun PosterCard(ch: Channel, onClick: () -> Unit) {
                     )
                 }
             }
-            // Hauteur fixe = 2 lignes réservées : toutes les rangées de la
-            // grille restent alignées quelle que soit la longueur du titre.
             Box(Modifier.padding(top = 6.dp, start = 2.dp, end = 2.dp).height(32.dp)) {
                 Text(
                     ch.name,

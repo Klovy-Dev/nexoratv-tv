@@ -8,10 +8,13 @@ import fr.nexoratv.tv.core.DeviceId
 import fr.nexoratv.tv.core.Net
 import fr.nexoratv.tv.core.mac.MacPortalClient
 import fr.nexoratv.tv.core.mac.MacPortalException
+import fr.nexoratv.tv.core.model.Channel
 import fr.nexoratv.tv.core.model.LoadProgress
 import fr.nexoratv.tv.core.model.LoadedPlaylist
 import fr.nexoratv.tv.core.model.PlaylistSource
+import fr.nexoratv.tv.core.model.SeriesBundle
 import fr.nexoratv.tv.core.model.SourceKind
+import fr.nexoratv.tv.core.model.VodInfo
 import fr.nexoratv.tv.core.xtream.XtreamClient
 import fr.nexoratv.tv.core.xtream.XtreamException
 import fr.nexoratv.tv.data.CatalogRepository
@@ -30,10 +33,20 @@ sealed interface Screen {
     data object Connect : Screen
     data object Home : Screen
     data class Catalog(val section: Section) : Screen
+    data class MovieDetail(val channel: Channel) : Screen
+    data class SeriesDetail(val seriesId: String, val name: String, val cover: String?) : Screen
     data object Settings : Screen
 }
 
 enum class Section(val label: String) { TV("TV"), MOVIES("Films"), SERIES("Séries") }
+
+/** Contenu de la fiche détail (film ou série) en cours. */
+sealed interface DetailState {
+    data object Loading : DetailState
+    data class Movie(val channel: Channel, val info: VodInfo) : DetailState
+    data class Series(val name: String, val cover: String?, val bundle: SeriesBundle) : DetailState
+    data class Error(val message: String) : DetailState
+}
 
 sealed interface CatalogState {
     data object Idle : CatalogState
@@ -73,6 +86,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val _update = MutableStateFlow<UpdateState>(UpdateState.Idle)
     val updateState: StateFlow<UpdateState> = _update.asStateFlow()
 
+    private val _detail = MutableStateFlow<DetailState>(DetailState.Loading)
+    val detail: StateFlow<DetailState> = _detail.asStateFlow()
+
+    /** Section catalogue d'où l'on vient (pour le retour depuis une fiche). */
+    private var lastSection: Section = Section.MOVIES
+
     /** Journal de chargement (Paramètres → Diagnostic). */
     val debugLog: StateFlow<List<String>> = DebugLog.lines
     fun clearDebugLog() = DebugLog.clear()
@@ -97,8 +116,43 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun goConnect() { _screen.value = Screen.Connect }
     fun goHome() { _screen.value = Screen.Home }
-    fun openSection(section: Section) { _screen.value = Screen.Catalog(section) }
+    fun openSection(section: Section) { lastSection = section; _screen.value = Screen.Catalog(section) }
     fun openSettings() { _screen.value = Screen.Settings }
+    fun backToCatalog() { _screen.value = Screen.Catalog(lastSection) }
+
+    // -------------------------------------------------------- Fiche détail
+    fun openMovie(channel: Channel) {
+        _screen.value = Screen.MovieDetail(channel)
+        _detail.value = DetailState.Loading
+        val src = store.selected
+        val sid = channel.streamId
+        if (src == null || sid.isNullOrEmpty()) {
+            _detail.value = DetailState.Movie(channel, VodInfo()); return
+        }
+        viewModelScope.launch {
+            runCatching { catalog.vodInfo(src, sid) }
+                .onSuccess { _detail.value = DetailState.Movie(channel, it) }
+                .onFailure { _detail.value = DetailState.Movie(channel, VodInfo()) }
+        }
+    }
+
+    fun openSeries(seriesId: String, name: String, cover: String?) {
+        _screen.value = Screen.SeriesDetail(seriesId, name, cover)
+        _detail.value = DetailState.Loading
+        val src = store.selected
+        if (src == null || seriesId.isEmpty()) {
+            _detail.value = DetailState.Error("Série indisponible."); return
+        }
+        viewModelScope.launch {
+            runCatching { catalog.series(src, seriesId) }
+                .onSuccess { _detail.value = DetailState.Series(name, cover, it) }
+                .onFailure {
+                    _detail.value = DetailState.Error(
+                        (it as? XtreamException)?.message ?: "Impossible de charger la série."
+                    )
+                }
+        }
+    }
 
     // --------------------------------------------------- Activation par MAC
     fun activateByMac(onResult: (ok: Boolean, error: String?) -> Unit) {

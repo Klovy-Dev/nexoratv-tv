@@ -22,6 +22,8 @@ import fr.nexoratv.tv.ui.ConnectScreen
 import fr.nexoratv.tv.ui.ErrorScreen
 import fr.nexoratv.tv.ui.HubScreen
 import fr.nexoratv.tv.ui.LoadingScreen
+import fr.nexoratv.tv.ui.MovieDetailScreen
+import fr.nexoratv.tv.ui.SeriesDetailScreen
 import fr.nexoratv.tv.ui.SettingsScreen
 import fr.nexoratv.tv.ui.theme.NexoraTheme
 
@@ -56,8 +58,12 @@ private fun Root(onPlay: (sourceId: String, queue: List<Channel>, startIndex: In
     val loadProgress by vm.loadProgress.collectAsState()
     val update by vm.updateState.collectAsState()
     val diagnostics by vm.debugLog.collectAsState()
+    val detail by vm.detail.collectAsState()
 
     BackHandler(enabled = screen is Screen.Catalog || screen == Screen.Settings) { vm.goHome() }
+    BackHandler(
+        enabled = screen is Screen.MovieDetail || screen is Screen.SeriesDetail,
+    ) { vm.backToCatalog() }
     BackHandler(enabled = screen == Screen.Connect && sources.isNotEmpty()) { vm.goHome() }
 
     val ready = catalog as? CatalogState.Ready
@@ -89,8 +95,24 @@ private fun Root(onPlay: (sourceId: String, queue: List<Channel>, startIndex: In
                 sourceId = vm.currentSource?.id ?: "",
                 sourceName = vm.currentSource?.name ?: "NexoraTV",
                 onPlay = onPlay,
+                onOpenMovie = vm::openMovie,
+                onOpenSeries = vm::openSeries,
                 onBack = vm::goHome,
             ) else LoadingScreen(progress = loadProgress, expectVod = vm.loadExpectVod)
+
+        is Screen.MovieDetail -> MovieDetailScreen(
+            state = detail,
+            sourceId = vm.currentSource?.id ?: "",
+            onPlay = onPlay,
+            onBack = vm::backToCatalog,
+        )
+
+        is Screen.SeriesDetail -> SeriesDetailScreen(
+            state = detail,
+            sourceId = vm.currentSource?.id ?: "",
+            onPlay = onPlay,
+            onBack = vm::backToCatalog,
+        )
 
         Screen.Home -> when (val cs = catalog) {
             is CatalogState.Ready -> HubScreen(

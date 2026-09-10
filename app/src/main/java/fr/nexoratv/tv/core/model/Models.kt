@@ -72,6 +72,35 @@ data class Series(
     val groupOrDefault: String get() = group ?: UNCATEGORIZED
 }
 
+/** Détail d'un film (`get_vod_info`). */
+data class VodInfo(
+    val plot: String? = null,
+    val genre: String? = null,
+    val cast: String? = null,
+    val director: String? = null,
+    val year: Int? = null,
+    val rating: Double? = null,
+    val durationSecs: Int? = null,
+    val backdrop: String? = null,
+    val poster: String? = null,
+)
+
+/** Détail d'une série + ses épisodes (`get_series_info`). */
+data class SeriesBundle(
+    val plot: String? = null,
+    val genre: String? = null,
+    val cast: String? = null,
+    val director: String? = null,
+    val year: Int? = null,
+    val rating: Double? = null,
+    val backdrop: String? = null,
+    val cover: String? = null,
+    val episodes: List<Episode> = emptyList(),
+) {
+    val seasons: List<Int> get() = episodes.map { it.season }.distinct().sorted()
+    fun episodesOf(season: Int): List<Episode> = episodes.filter { it.season == season }
+}
+
 /** Un épisode d'une série (résolu via `get_series_info`). */
 data class Episode(
     val id: String,

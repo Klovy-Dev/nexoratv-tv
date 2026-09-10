@@ -13,7 +13,9 @@ import fr.nexoratv.tv.core.model.LoadedPlaylist
 import fr.nexoratv.tv.core.model.MediaKind
 import fr.nexoratv.tv.core.model.PlaylistSource
 import fr.nexoratv.tv.core.model.Series
+import fr.nexoratv.tv.core.model.SeriesBundle
 import fr.nexoratv.tv.core.model.SourceKind
+import fr.nexoratv.tv.core.model.VodInfo
 import fr.nexoratv.tv.core.xtream.XtreamClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -60,6 +62,16 @@ class CatalogRepository(private val context: Context) {
 
     suspend fun cachedOrNull(source: PlaylistSource): LoadedPlaylist? =
         cacheFile(source.id).takeIf { it.exists() }?.let { readCache(it) }
+
+    /** Fiche d'un film (synopsis, casting, durée…). */
+    suspend fun vodInfo(source: PlaylistSource, streamId: String): VodInfo =
+        if (source.kind == SourceKind.XTREAM) XtreamClient(source, Net.http).loadVodInfo(streamId)
+        else VodInfo()
+
+    /** Fiche d'une série + tous ses épisodes. */
+    suspend fun series(source: PlaylistSource, seriesId: String): SeriesBundle =
+        if (source.kind == SourceKind.XTREAM) XtreamClient(source, Net.http).loadSeries(seriesId)
+        else SeriesBundle()
 
     private suspend fun fetch(
         source: PlaylistSource,

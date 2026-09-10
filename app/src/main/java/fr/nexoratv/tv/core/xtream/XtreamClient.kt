@@ -7,12 +7,12 @@ import fr.nexoratv.tv.core.model.LoadedPlaylist
 import fr.nexoratv.tv.core.model.MediaKind
 import fr.nexoratv.tv.core.model.PlaylistSource
 import fr.nexoratv.tv.core.model.Series
+import fr.nexoratv.tv.core.model.SeriesBundle
+import fr.nexoratv.tv.core.model.VodInfo
 import fr.nexoratv.tv.core.model.XtreamOutput
 import android.util.JsonReader
 import android.util.JsonToken
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
@@ -108,40 +108,43 @@ class XtreamClient(
     }
 
     /**
-     * Récupère une action qui renvoie une liste d'objets, **en streaming**
-     * (`JsonReader` branché sur le flux réseau). On ne charge jamais toute la
-     * réponse en mémoire — c'est ce qui faisait planter en silence (OOM) les
-     * gros `get_series` sur Fire TV Stick. Chaque objet → `Map<String,String>`.
+     * Récupère une action qui renvoie une liste d'objets, **en streaming**, et
+     * appelle `onRow` pour chaque objet (`Map<String,String>`). On ne garde
+     * jamais ni la réponse ni la liste des objets en mémoire — un seul objet
+     * vit à la fois. C'est ce qui faisait planter (OOM) les gros `get_series`
+     * sur Fire TV Stick. Retourne le nombre d'objets lus.
      */
-    private suspend fun getRows(params: Map<String, String>): List<Map<String, String>> =
-        withContext(Dispatchers.IO) {
-            val action = params["action"] ?: "?"
-            val req = Request.Builder().url(api(params)).header("User-Agent", USER_AGENT).build()
-            try {
-                listHttp.newCall(req).execute().use { res ->
-                    if (!res.isSuccessful) throw XtreamException("$action : HTTP ${res.code}")
-                    val body = res.body ?: throw XtreamException("$action : réponse vide")
-                    val rows = ArrayList<Map<String, String>>()
-                    JsonReader(body.charStream().buffered()).use { r ->
-                        r.isLenient = true
-                        readRowsInto(r, rows)
-                    }
-                    log("$action : ${rows.size} objets reçus")
-                    rows
+    private suspend fun streamRows(
+        params: Map<String, String>,
+        onRow: (Map<String, String>) -> Unit,
+    ): Int = withContext(Dispatchers.IO) {
+        val action = params["action"] ?: "?"
+        val req = Request.Builder().url(api(params)).header("User-Agent", USER_AGENT).build()
+        var count = 0
+        try {
+            listHttp.newCall(req).execute().use { res ->
+                if (!res.isSuccessful) throw XtreamException("$action : HTTP ${res.code}")
+                val body = res.body ?: throw XtreamException("$action : réponse vide")
+                JsonReader(body.charStream().buffered()).use { r ->
+                    r.isLenient = true
+                    streamValue(r) { row -> count++; onRow(row) }
                 }
-            } catch (e: XtreamException) {
-                throw e
-            } catch (e: Throwable) {
-                log("$action : échec — ${e.javaClass.simpleName} ${e.message ?: ""}")
-                throw XtreamException("$action : ${e.message ?: e.javaClass.simpleName}")
             }
+        } catch (e: XtreamException) {
+            throw e
+        } catch (e: Throwable) {
+            log("$action : échec — ${e.javaClass.simpleName} ${e.message ?: ""}")
+            throw XtreamException("$action : ${e.message ?: e.javaClass.simpleName}")
         }
+        log("$action : $count objets reçus")
+        count
+    }
 
-    private fun readRowsInto(r: JsonReader, rows: MutableList<Map<String, String>>) {
+    private fun streamValue(r: JsonReader, onRow: (Map<String, String>) -> Unit) {
         when (r.peek()) {
             JsonToken.BEGIN_ARRAY -> {
                 r.beginArray()
-                while (r.hasNext()) readOneRow(r, rows)
+                while (r.hasNext()) streamOne(r, onRow)
                 r.endArray()
             }
             JsonToken.BEGIN_OBJECT -> {
@@ -150,10 +153,10 @@ class XtreamClient(
                 while (r.hasNext()) {
                     r.nextName()
                     when (r.peek()) {
-                        JsonToken.BEGIN_OBJECT -> readOneRow(r, rows)
+                        JsonToken.BEGIN_OBJECT -> streamOne(r, onRow)
                         JsonToken.BEGIN_ARRAY -> {
                             r.beginArray()
-                            while (r.hasNext()) readOneRow(r, rows)
+                            while (r.hasNext()) streamOne(r, onRow)
                             r.endArray()
                         }
                         else -> r.skipValue()
@@ -165,9 +168,9 @@ class XtreamClient(
         }
     }
 
-    private fun readOneRow(r: JsonReader, rows: MutableList<Map<String, String>>) {
+    private fun streamOne(r: JsonReader, onRow: (Map<String, String>) -> Unit) {
         if (r.peek() != JsonToken.BEGIN_OBJECT) { r.skipValue(); return }
-        val m = HashMap<String, String>()
+        val m = HashMap<String, String>(16)
         r.beginObject()
         while (r.hasNext()) {
             val key = r.nextName()
@@ -180,7 +183,7 @@ class XtreamClient(
             }
         }
         r.endObject()
-        rows.add(m)
+        onRow(m)
     }
 
     private fun readFirstString(r: JsonReader): String {
@@ -220,42 +223,34 @@ class XtreamClient(
     }
 
     // --------------------------------------------------------- Chargement
-    suspend fun loadAll(onProgress: (LoadProgress) -> Unit = {}): LoadedPlaylist = coroutineScope {
-        val progLock = Any()
+    suspend fun loadAll(onProgress: (LoadProgress) -> Unit = {}): LoadedPlaylist {
         var prog = LoadProgress()
-        // `movies` et `series` se terminent en parallèle : accès synchronisé.
-        fun emit(f: (LoadProgress) -> LoadProgress) {
-            val next = synchronized(progLock) { prog = f(prog); prog }
-            onProgress(next)
-        }
+        fun emit(f: (LoadProgress) -> LoadProgress) { prog = f(prog); onProgress(prog) }
 
         log("connexion à $host")
         val account = authenticate()
         log("compte OK" + (account.expiresAt?.let { " · expire le ${java.util.Date(it)}" } ?: ""))
         emit { it.copy(connected = true) }
 
-        // Live d'abord (fait échouer vite si le compte pose problème), puis
-        // films + séries en parallèle.
+        // Séquentiel (live → films → séries) : sur un catalogue énorme, faire
+        // films + séries en parallèle doublait le pic mémoire et faisait
+        // crasher le Fire TV Stick.
         val live = fetchStreams("get_live_categories", "get_live_streams", "live", liveExt, MediaKind.LIVE)
         if (live.isEmpty()) throw XtreamException("Aucune chaîne renvoyée par le serveur.")
         emit { it.copy(live = live.size) }
 
-        val moviesJob = async {
-            runCatching {
-                fetchStreams("get_vod_categories", "get_vod_streams", "movie", null, MediaKind.MOVIE)
-            }.onFailure { log("films : échec — ${it.message}") }.getOrDefault(emptyList())
-                .also { m -> emit { p -> p.copy(movies = m.size) } }
-        }
-        val seriesJob = async {
-            runCatching { fetchSeries() }
-                .onFailure { log("séries : échec — ${it.message}") }
-                .getOrDefault(emptyList())
-                .also { s -> emit { p -> p.copy(series = s.size) } }
-        }
-        val movies = moviesJob.await()
-        val series = seriesJob.await()
+        val movies = runCatching {
+            fetchStreams("get_vod_categories", "get_vod_streams", "movie", null, MediaKind.MOVIE)
+        }.onFailure { log("films : échec — ${it.message}") }.getOrDefault(emptyList())
+        emit { it.copy(movies = movies.size) }
+
+        val series = runCatching { fetchSeries() }
+            .onFailure { log("séries : échec — ${it.message}") }
+            .getOrDefault(emptyList())
+        emit { it.copy(series = series.size) }
+
         log("terminé : ${live.size} chaînes · ${movies.size} films · ${series.size} séries")
-        LoadedPlaylist(live, movies, series, expiresAt = account.expiresAt)
+        return LoadedPlaylist(live, movies, series, expiresAt = account.expiresAt)
     }
 
     private suspend fun fetchStreams(
@@ -265,19 +260,19 @@ class XtreamClient(
         ext: String?,
         kind: MediaKind,
     ): List<Channel> {
-        val cats = getRows(mapOf("action" to catAction))
+        val cats = ArrayList<Map<String, String>>()
+        streamRows(mapOf("action" to catAction)) { cats.add(it) }
         val names = categoryNames(cats)
         val rank = categoryRank(cats)
-        val streams = getRows(mapOf("action" to streamsAction))
 
-        val out = withContext(Dispatchers.Default) {
-            val list = ArrayList<Channel>(streams.size)
-            for (s in streams) {
-                val sid = s["stream_id"].orEmpty()
-                if (sid.isEmpty() || sid == "null") continue
-                val container = s["container_extension"].orEmpty().ifEmpty { "mp4" }
-                val effExt = ext ?: container
-                list += Channel(
+        val out = ArrayList<Channel>()
+        streamRows(mapOf("action" to streamsAction)) { s ->
+            val sid = s["stream_id"].orEmpty()
+            if (sid.isEmpty() || sid == "null") return@streamRows
+            val container = s["container_extension"].orEmpty().ifEmpty { "mp4" }
+            val effExt = ext ?: container
+            out.add(
+                Channel(
                     id = "${segment}_$sid",
                     name = s["name"]?.trim().orEmpty().ifEmpty { "Sans nom" },
                     url = "$host/$segment/$user/$pass/$sid.$effExt",
@@ -292,29 +287,28 @@ class XtreamClient(
                     genre = if (kind == MediaKind.MOVIE) nullIfEmpty(s["genre"]) else null,
                     containerExt = if (kind == MediaKind.MOVIE) container else null,
                 )
-            }
-            sortByCategory(list, rank, names) { it.groupOrDefault }
-            list
+            )
         }
-        log("$streamsAction : ${out.size} gardés / ${streams.size} · ${names.size} catégories")
+        withContext(Dispatchers.Default) { sortByCategory(out, rank, names) { it.groupOrDefault } }
+        log("$streamsAction : ${out.size} gardés · ${names.size} catégories")
         return out
     }
 
     private suspend fun fetchSeries(): List<Series> {
-        val cats = getRows(mapOf("action" to "get_series_categories"))
+        val cats = ArrayList<Map<String, String>>()
+        streamRows(mapOf("action" to "get_series_categories")) { cats.add(it) }
         val names = categoryNames(cats)
         val rank = categoryRank(cats)
-        val list = getRows(mapOf("action" to "get_series"))
 
-        val out = withContext(Dispatchers.Default) {
-            val acc = ArrayList<Series>(list.size)
-            for (s in list) {
-                val sid = (s["series_id"] ?: s["id"] ?: s["num"]).orEmpty()
-                if (sid.isEmpty() || sid == "null") continue
-                // On ne garde que le strict nécessaire à la grille : sur 30k+
-                // séries, embarquer plot/cast/director sature la mémoire du
-                // Fire TV Stick. Le détail sera récupéré via get_series_info.
-                acc += Series(
+        // On ne garde que le strict nécessaire à la grille : sur 30k+ séries,
+        // embarquer plot/cast/director sature la mémoire du Fire TV Stick. Le
+        // détail sera récupéré via get_series_info.
+        val out = ArrayList<Series>()
+        streamRows(mapOf("action" to "get_series")) { s ->
+            val sid = (s["series_id"] ?: s["id"] ?: s["num"]).orEmpty()
+            if (sid.isEmpty() || sid == "null") return@streamRows
+            out.add(
+                Series(
                     id = "series_$sid",
                     seriesId = sid,
                     name = s["name"]?.trim().orEmpty().ifEmpty { "Sans nom" },
@@ -324,43 +318,98 @@ class XtreamClient(
                     rating = parseRating(s["rating"]),
                     year = parseYear(s["releaseDate"].orEmpty().ifEmpty { s["release_date"].orEmpty() }),
                 )
-            }
-            sortByCategory(acc, rank, names) { it.groupOrDefault }
-            acc
+            )
         }
-        log("get_series : ${out.size} séries / ${list.size} · ${names.size} catégories")
+        withContext(Dispatchers.Default) { sortByCategory(out, rank, names) { it.groupOrDefault } }
+        log("get_series : ${out.size} séries · ${names.size} catégories")
         return out
     }
 
-    /** Saisons/épisodes d'une série. */
-    suspend fun loadEpisodes(seriesId: String): List<Episode> = withContext(Dispatchers.Default) {
-        val data = getJson(mapOf("action" to "get_series_info", "series_id" to seriesId))
-        val root = data as? JSONObject ?: return@withContext emptyList()
-        val episodes = root.optJSONObject("episodes") ?: return@withContext emptyList()
+    /** Fiche d'un film : synopsis, casting, durée, affiche… (`get_vod_info`). */
+    suspend fun loadVodInfo(streamId: String): VodInfo = withContext(Dispatchers.Default) {
+        val root = getJson(mapOf("action" to "get_vod_info", "vod_id" to streamId)) as? JSONObject
+            ?: return@withContext VodInfo()
+        val info = root.optJSONObject("info") ?: JSONObject()
+        VodInfo(
+            plot = nullIfEmpty(firstNonEmptyJ(info, "plot", "description", "overview")),
+            genre = nullIfEmpty(info.optString("genre")),
+            cast = nullIfEmpty(firstNonEmptyJ(info, "cast", "actors")),
+            director = nullIfEmpty(info.optString("director")),
+            year = parseYear(info.optString("releaseDate").ifEmpty { info.optString("release_date") }
+                .ifEmpty { info.optString("year") }),
+            rating = parseRating(info.opt("rating")),
+            durationSecs = info.optString("duration_secs").toIntOrNull()
+                ?: hmsToSecs(info.optString("duration")),
+            backdrop = firstBackdropJ(info.opt("backdrop_path")),
+            poster = nullIfEmpty(firstNonEmptyJ(info, "movie_image", "cover_big", "cover")),
+        )
+    }
+
+    /** Fiche d'une série + tous ses épisodes (`get_series_info`). */
+    suspend fun loadSeries(seriesId: String): SeriesBundle = withContext(Dispatchers.Default) {
+        val root = getJson(mapOf("action" to "get_series_info", "series_id" to seriesId)) as? JSONObject
+            ?: return@withContext SeriesBundle()
+        val info = root.optJSONObject("info") ?: JSONObject()
+        val episodes = root.optJSONObject("episodes")
         val out = ArrayList<Episode>()
-        for (seasonKey in episodes.keys()) {
-            val arr = episodes.optJSONArray(seasonKey) ?: continue
-            for (i in 0 until arr.length()) {
-                val e = arr.optJSONObject(i) ?: continue
-                val eid = e.opt("id")?.toString().orEmpty()
-                if (eid.isEmpty()) continue
-                val ext = e.optString("container_extension").ifEmpty { "mp4" }
-                val infoObj = e.optJSONObject("info")
-                out += Episode(
-                    id = "ep_$eid",
-                    episodeId = eid,
-                    title = e.optString("title").ifEmpty { "Épisode ${e.optString("episode_num")}" },
-                    season = seasonKey.toIntOrNull() ?: e.optString("season").toIntOrNull() ?: 1,
-                    episode = e.optString("episode_num").toIntOrNull() ?: (i + 1),
-                    url = "$host/series/$user/$pass/$eid.$ext",
-                    plot = nullIfEmpty(infoObj?.optString("plot")),
-                    cover = nullIfEmpty(infoObj?.optString("movie_image")),
-                    durationSecs = infoObj?.optString("duration_secs")?.toIntOrNull(),
-                )
+        if (episodes != null) {
+            for (seasonKey in episodes.keys()) {
+                val arr = episodes.optJSONArray(seasonKey) ?: continue
+                for (i in 0 until arr.length()) {
+                    val e = arr.optJSONObject(i) ?: continue
+                    val eid = e.opt("id")?.toString().orEmpty()
+                    if (eid.isEmpty()) continue
+                    val ext = e.optString("container_extension").ifEmpty { "mp4" }
+                    val infoObj = e.optJSONObject("info")
+                    out += Episode(
+                        id = "ep_$eid",
+                        episodeId = eid,
+                        title = e.optString("title").ifEmpty { "Épisode ${e.optString("episode_num")}" },
+                        season = seasonKey.toIntOrNull() ?: e.optString("season").toIntOrNull() ?: 1,
+                        episode = e.optString("episode_num").toIntOrNull() ?: (i + 1),
+                        url = "$host/series/$user/$pass/$eid.$ext",
+                        plot = nullIfEmpty(infoObj?.optString("plot")),
+                        cover = nullIfEmpty(infoObj?.optString("movie_image")),
+                        durationSecs = infoObj?.optString("duration_secs")?.toIntOrNull(),
+                    )
+                }
             }
         }
         out.sortWith(compareBy({ it.season }, { it.episode }))
-        out
+        SeriesBundle(
+            plot = nullIfEmpty(info.optString("plot")),
+            genre = nullIfEmpty(info.optString("genre")),
+            cast = nullIfEmpty(firstNonEmptyJ(info, "cast", "actors")),
+            director = nullIfEmpty(info.optString("director")),
+            year = parseYear(info.optString("releaseDate").ifEmpty { info.optString("release_date") }),
+            rating = parseRating(info.opt("rating")),
+            backdrop = firstBackdropJ(info.opt("backdrop_path")),
+            cover = nullIfEmpty(info.optString("cover")),
+            episodes = out,
+        )
+    }
+
+    private fun firstNonEmptyJ(o: JSONObject, vararg keys: String): String {
+        for (k in keys) {
+            val v = o.optString(k)
+            if (v.isNotEmpty() && v != "null") return v
+        }
+        return ""
+    }
+
+    private fun firstBackdropJ(v: Any?): String? = when (v) {
+        is JSONArray -> if (v.length() > 0) nullIfEmpty(v.optString(0)) else null
+        else -> nullIfEmpty(v?.toString())
+    }
+
+    /** "1:38:20" ou "01:38" → secondes. */
+    private fun hmsToSecs(s: String): Int? {
+        val parts = s.split(":").mapNotNull { it.trim().toIntOrNull() }
+        return when (parts.size) {
+            3 -> parts[0] * 3600 + parts[1] * 60 + parts[2]
+            2 -> parts[0] * 60 + parts[1]
+            else -> null
+        }
     }
 
     // ------------------------------------------------------------ helpers

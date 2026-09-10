@@ -1,6 +1,6 @@
 {
-  "versionCode": 7,
-  "versionName": "0.4.3",
-  "url": "https://github.com/Klovy-Dev/nexoratv-tv/releases/download/tv-v0.4.3/NexoraTV-TV.apk",
-  "notes": "Crash sur les très gros catalogues (30 000+ séries) corrigé : le cache disque est aussi écrit et relu en flux, et on ne garde en mémoire que l'essentiel (affiche + titre). Plus de saturation mémoire du Fire TV Stick.\n\nInclut 0.4.0 → 0.4.2."
+  "versionCode": 8,
+  "versionName": "0.4.4",
+  "url": "https://github.com/Klovy-Dev/nexoratv-tv/releases/download/tv-v0.4.4/NexoraTV-TV.apk",
+  "notes": "- Fiches détail : film = affiche + synopsis + « Regarder maintenant » ; série = colonne saisons / colonne épisodes qui change selon la saison\n- Recherche dans TV / Films / Séries\n- Chargement du catalogue séquentiel + un seul élément en mémoire à la fois : le crash pendant le chargement d'un très gros catalogue est corrigé"
 }
