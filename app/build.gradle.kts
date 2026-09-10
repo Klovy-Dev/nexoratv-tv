@@ -4,8 +4,6 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
-    alias(libs.plugins.kotlin.kapt)
-    alias(libs.plugins.hilt)
 }
 
 // Signature release : lit keystore.properties (non versionné). Absent =
@@ -81,8 +79,6 @@ android {
     }
 }
 
-kapt { correctErrorTypes = true }
-
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
@@ -107,14 +103,6 @@ dependencies {
     implementation(libs.media3.session)
     implementation(libs.nextlib.media3ext)
     implementation(libs.nextlib.mediainfo)
-
-    implementation(libs.room.runtime)
-    implementation(libs.room.ktx)
-    kapt(libs.room.compiler)
-
-    implementation(libs.hilt.android)
-    kapt(libs.hilt.compiler)
-    implementation(libs.hilt.navigation.compose)
 
     implementation(libs.okhttp)
     implementation(libs.okhttp.logging)
