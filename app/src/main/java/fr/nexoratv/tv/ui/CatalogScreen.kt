@@ -235,7 +235,7 @@ fun CatalogScreen(
                         modifier = Modifier.width(224.dp).fillMaxHeight(),
                         state = sidebarState,
                         verticalArrangement = Arrangement.spacedBy(6.dp),
-                        contentPadding = PaddingValues(vertical = 4.dp, bottom = 40.dp),
+                        contentPadding = PaddingValues(top = 4.dp, bottom = 40.dp),
                     ) {
                         items(groups.size) { i ->
                             SidebarItem(
