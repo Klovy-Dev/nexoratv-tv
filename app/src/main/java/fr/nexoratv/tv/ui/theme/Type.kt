@@ -30,8 +30,12 @@ val Bricolage = FontFamily(
     Font(R.font.bricolage_grotesque, FontWeight.ExtraBold, variationSettings = axis(800)),
 )
 
-/** Style de texte de base (hérité par tous les `Text` sans famille explicite). */
-val NexoraBaseTextStyle = TextStyle(fontFamily = Manrope, color = Color(0xFFEAEEF7))
+/**
+ * Style de base hérité par tous les `Text` : on ne fixe QUE la police — pas
+ * la couleur (sinon les composants qui posent leur propre `contentColor`,
+ * comme les boutons remplis, se retrouvent en blanc sur blanc).
+ */
+val NexoraBaseTextStyle = TextStyle(fontFamily = Manrope)
 
 /** Échelle Material 3 : titres en Bricolage, le reste en Manrope. */
 val NexoraTypography: Typography = Typography().let { d ->
