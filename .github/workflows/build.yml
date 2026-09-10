@@ -16,18 +16,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Cohérence des versions (sur tag tv-v*)
+      - name: Cohérence tag / build.gradle (sur tag tv-v*)
         if: startsWith(github.ref, 'refs/tags/tv-v')
         run: |
           set -e
           tag="${GITHUB_REF_NAME#tv-v}"
           gradle=$(grep -m1 'versionName = ' app/build.gradle.kts | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
-          manifest=$(python3 -c "import json,sys; print(json.load(open('update.json'))['versionName'])")
-          echo "tag=$tag · build.gradle=$gradle · update.json=$manifest"
-          if [ "$tag" != "$gradle" ] || [ "$tag" != "$manifest" ]; then
-            echo "::error::versions incohérentes (tag/build.gradle/update.json)"
-            exit 1
-          fi
+          echo "tag=$tag · build.gradle=$gradle"
+          [ "$tag" = "$gradle" ] || { echo "::error::tag ($tag) != build.gradle ($gradle)"; exit 1; }
 
       - uses: actions/setup-java@v5
         with:
@@ -104,3 +100,23 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: NexoraTV-TV*.apk
+
+      # update.json ne pointe une version QU'UNE FOIS sa Release publiée
+      # (sinon un utilisateur qui vérifie pile entre le tag et la fin du build
+      # obtient « téléchargement échoué : HTTP 404 »).
+      - name: Synchroniser update.json sur main
+        if: startsWith(github.ref, 'refs/tags/tv-v')
+        run: |
+          set -e
+          v="${GITHUB_REF_NAME#tv-v}"
+          git fetch origin main
+          git switch -C main origin/main
+          vc=$(grep -m1 'versionCode = ' app/build.gradle.kts | grep -oE '[0-9]+')
+          url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/NexoraTV-TV.apk"
+          jq -n --argjson vc "$vc" --arg v "$v" --arg url "$url" --rawfile notes RELEASE_NOTES.md \
+            '{versionCode:$vc, versionName:$v, url:$url, notes:$notes}' > update.json
+          git add update.json
+          git -c user.name="github-actions[bot]" \
+              -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              commit -m "chore(tv): update.json -> $v (Release publiée)" || exit 0
+          git push origin main

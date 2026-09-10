@@ -1,0 +1,3 @@
+- Fiches détail : film = affiche + synopsis + « Regarder maintenant » ; série = colonne saisons / colonne épisodes qui change selon la saison
+- Recherche dans TV / Films / Séries
+- Chargement du catalogue séquentiel + un seul élément en mémoire à la fois : le crash pendant le chargement d'un très gros catalogue est corrigé
