@@ -56,14 +56,15 @@ import fr.nexoratv.tv.core.model.Channel
 import fr.nexoratv.tv.core.model.Episode
 import fr.nexoratv.tv.core.model.MediaKind
 import fr.nexoratv.tv.core.model.VodInfo
+import fr.nexoratv.tv.ui.theme.Bricolage
 import fr.nexoratv.tv.ui.theme.NexoraBackdrop
-import fr.nexoratv.tv.ui.theme.NexoraGradient
 import fr.nexoratv.tv.ui.theme.NexoraInk
 import fr.nexoratv.tv.ui.theme.NexoraInkDim
 import fr.nexoratv.tv.ui.theme.NexoraInkFaint
 import fr.nexoratv.tv.ui.theme.NexoraNight
 import fr.nexoratv.tv.ui.theme.NexoraPurple
 import fr.nexoratv.tv.ui.theme.NexoraSurface
+import fr.nexoratv.tv.ui.theme.NexoraSurface3
 
 // ---------------------------------------------------------------- Film
 
@@ -76,7 +77,13 @@ fun MovieDetailScreen(
 ) {
     when (state) {
         is DetailState.Loading -> Loader()
-        is DetailState.Error -> ErrorScreen(state.message, onBack)
+        is DetailState.Error -> StatusScreen(
+            title = "Contenu indisponible",
+            subtitle = state.message,
+            kind = StatusKind.NETWORK,
+            actionLabel = "Retour",
+            onAction = onBack,
+        )
         is DetailState.Movie -> MovieBody(state.channel, state.info, sourceId, onPlay, onBack)
         is DetailState.Series -> Loader()
     }
@@ -101,7 +108,7 @@ private fun MovieBody(
                 Poster(info.poster ?: channel.logo, Modifier.width(210.dp))
                 Spacer(Modifier.width(28.dp))
                 Column(Modifier.weight(1f).fillMaxHeight()) {
-                    Text(channel.name, fontSize = 30.sp, fontWeight = FontWeight.Bold, color = NexoraInk)
+                    Text(channel.name, fontFamily = Bricolage, fontSize = 30.sp, fontWeight = FontWeight.Bold, color = NexoraInk)
                     Spacer(Modifier.height(6.dp))
                     MetaLine(
                         listOfNotNull(
@@ -150,7 +157,13 @@ fun SeriesDetailScreen(
 ) {
     when (state) {
         is DetailState.Loading -> Loader()
-        is DetailState.Error -> ErrorScreen(state.message, onBack)
+        is DetailState.Error -> StatusScreen(
+            title = "Contenu indisponible",
+            subtitle = state.message,
+            kind = StatusKind.NETWORK,
+            actionLabel = "Retour",
+            onAction = onBack,
+        )
         is DetailState.Movie -> Loader()
         is DetailState.Series -> SeriesBody(state, sourceId, onPlay, onBack)
     }
@@ -179,7 +192,7 @@ private fun SeriesBody(
                 Poster(bundle.cover ?: s.cover, Modifier.width(120.dp))
                 Spacer(Modifier.width(20.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(s.name, fontSize = 26.sp, fontWeight = FontWeight.Bold, color = NexoraInk)
+                    Text(s.name, fontFamily = Bricolage, fontSize = 26.sp, fontWeight = FontWeight.Bold, color = NexoraInk)
                     Spacer(Modifier.height(4.dp))
                     MetaLine(
                         listOfNotNull(
@@ -327,7 +340,7 @@ private fun RowItem(
             .onFocusChanged { if (it.isFocused) onFocus() },
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(10.dp)),
         colors = ClickableSurfaceDefaults.colors(
-            containerColor = if (selected) NexoraPurple else NexoraSurface,
+            containerColor = if (selected) NexoraSurface3 else NexoraSurface,
             focusedContainerColor = NexoraPurple,
         ),
     ) {

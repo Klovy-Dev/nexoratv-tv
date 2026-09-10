@@ -58,7 +58,8 @@ fun ConnectScreen(vm: AppViewModel) {
                 Modifier.verticalScroll(rememberScrollState()).padding(40.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Text("NexoraTV", fontSize = 32.sp, fontWeight = FontWeight.ExtraBold,
+                Text("NexoraTV", fontFamily = fr.nexoratv.tv.ui.theme.Bricolage,
+                    fontSize = 32.sp, fontWeight = FontWeight.ExtraBold,
                     style = TextStyle(brush = NexoraGradient))
                 Spacer(Modifier.height(20.dp))
 

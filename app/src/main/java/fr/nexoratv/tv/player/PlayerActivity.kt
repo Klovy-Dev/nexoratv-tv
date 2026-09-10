@@ -8,17 +8,20 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
@@ -42,6 +45,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -71,6 +76,12 @@ import androidx.tv.material3.Text
 import fr.nexoratv.tv.core.Net
 import fr.nexoratv.tv.core.model.Channel
 import fr.nexoratv.tv.core.model.MediaKind
+import fr.nexoratv.tv.ui.theme.Bricolage
+import fr.nexoratv.tv.ui.theme.NexoraGradient
+import fr.nexoratv.tv.ui.theme.NexoraInk
+import fr.nexoratv.tv.ui.theme.NexoraInkDim
+import fr.nexoratv.tv.ui.theme.NexoraNight
+import fr.nexoratv.tv.ui.theme.NexoraPink
 import fr.nexoratv.tv.ui.theme.NexoraTheme
 import kotlinx.coroutines.delay
 
@@ -103,6 +114,8 @@ private fun PlayerScreen(items: List<Channel>, startIndex: Int, onExit: () -> Un
     var lastCheckedPos by remember { mutableLongStateOf(0L) }
     var stalledChecks by remember { mutableIntStateOf(0) }
     var tracks by remember { mutableStateOf<Tracks>(Tracks.EMPTY) }
+    var position by remember { mutableLongStateOf(0L) }
+    var duration by remember { mutableLongStateOf(0L) }
 
     val exo = remember { PlayerEngine.build(context, Net.http).apply { playWhenReady = true } }
     val rootFocus = remember { FocusRequester() }
@@ -146,6 +159,15 @@ private fun PlayerScreen(items: List<Channel>, startIndex: Int, onExit: () -> Un
         if (controlsVisible) { delay(50); runCatching { playFocus.requestFocus() } }
     }
     LaunchedEffect(Unit) { delay(100); runCatching { rootFocus.requestFocus() } }
+
+    // Position / durée (barre de progression VOD).
+    LaunchedEffect(index) {
+        while (true) {
+            position = exo.currentPosition.coerceAtLeast(0L)
+            duration = exo.duration.let { if (it > 0L) it else 0L }
+            delay(500)
+        }
+    }
 
     // Chien de garde live.
     LaunchedEffect(isLive, index) {
@@ -217,12 +239,20 @@ private fun PlayerScreen(items: List<Channel>, startIndex: Int, onExit: () -> Un
         )
 
         if (buffering && error == null) {
-            Text("Chargement…", color = Color.White, modifier = Modifier.align(Alignment.Center))
+            Row(
+                Modifier.align(Alignment.Center),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                androidx.compose.material3.CircularProgressIndicator(color = NexoraPink, strokeWidth = 3.dp)
+                Text("Chargement…", color = Color.White, fontSize = 15.sp)
+            }
         }
         error?.let {
             Column(Modifier.align(Alignment.Center).padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("Lecture impossible", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                Text(it, color = Color.White.copy(alpha = .7f))
+                Text("Lecture impossible", fontFamily = Bricolage, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(6.dp))
+                Text(it, color = Color.White.copy(alpha = .65f), fontSize = 13.sp)
             }
         }
 
@@ -236,6 +266,9 @@ private fun PlayerScreen(items: List<Channel>, startIndex: Int, onExit: () -> Un
                 subtitle = "${index + 1} / ${items.size}" + (current.group?.let { "  ·  $it" } ?: ""),
                 playing = playing,
                 canZap = items.size > 1,
+                isLive = isLive,
+                position = position,
+                duration = duration,
                 playFocus = playFocus,
                 onBack = onExit,
                 onPlayPause = ::togglePlay,
@@ -280,6 +313,9 @@ private fun ControlsBar(
     subtitle: String,
     playing: Boolean,
     canZap: Boolean,
+    isLive: Boolean,
+    position: Long,
+    duration: Long,
     playFocus: FocusRequester,
     onBack: () -> Unit,
     onPlayPause: () -> Unit,
@@ -290,25 +326,64 @@ private fun ControlsBar(
     Column(
         Modifier
             .fillMaxWidth()
-            .background(Color.Black.copy(alpha = .6f))
-            .padding(horizontal = 40.dp, vertical = 24.dp),
+            .background(Brush.verticalGradient(listOf(Color.Transparent, NexoraNight.copy(alpha = .96f))))
+            .padding(horizontal = 44.dp, vertical = 28.dp),
     ) {
-        Text(title, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
-        Text(subtitle, color = Color.White.copy(alpha = .7f), fontSize = 13.sp, maxLines = 1)
+        Text(title, fontFamily = Bricolage, color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+        Text(subtitle, color = NexoraInkDim, fontSize = 13.sp, maxLines = 1)
+
+        Spacer(Modifier.height(16.dp))
+        if (isLive) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box(Modifier.size(8.dp).clip(CircleShape).background(NexoraPink))
+                Text("DIRECT", color = NexoraPink, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            }
+        } else {
+            val frac = if (duration > 0L) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f
+            Box(
+                Modifier.fillMaxWidth().height(5.dp).clip(CircleShape).background(Color.White.copy(alpha = .16f)),
+            ) {
+                Box(Modifier.fillMaxWidth(frac).fillMaxHeight().clip(CircleShape).background(NexoraGradient))
+            }
+            Spacer(Modifier.height(6.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(fmtTime(position), color = NexoraInkDim, fontSize = 12.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+                Text(if (duration > 0L) "-" + fmtTime(duration - position) else "", color = NexoraInkDim, fontSize = 12.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+            }
+        }
+
+        Spacer(Modifier.height(14.dp))
         Row(
-            Modifier.fillMaxWidth().padding(top = 14.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Retour") }
             if (canZap) IconButton(onClick = onPrev) { Icon(Icons.Default.SkipPrevious, "Précédent") }
-            IconButton(onClick = onPlayPause, modifier = Modifier.focusRequester(playFocus)) {
-                Icon(if (playing) Icons.Default.Pause else Icons.Default.PlayArrow, "Lecture / pause")
+            Box(
+                Modifier
+                    .size(58.dp)
+                    .clip(CircleShape)
+                    .background(NexoraGradient),
+                contentAlignment = Alignment.Center,
+            ) {
+                IconButton(onClick = onPlayPause, modifier = Modifier.focusRequester(playFocus)) {
+                    Icon(if (playing) Icons.Default.Pause else Icons.Default.PlayArrow, "Lecture / pause")
+                }
             }
             if (canZap) IconButton(onClick = onNext) { Icon(Icons.Default.SkipNext, "Suivant") }
+            Spacer(Modifier.weight(1f))
             IconButton(onClick = onTracks) { Icon(Icons.Default.Tune, "Pistes") }
         }
     }
+}
+
+private fun fmtTime(ms: Long): String {
+    val s = (ms / 1000).coerceAtLeast(0)
+    val h = s / 3600
+    val m = (s % 3600) / 60
+    val sec = s % 60
+    return if (h > 0) "%d:%02d:%02d".format(h, m, sec) else "%d:%02d".format(m, sec)
 }
 
 @Composable

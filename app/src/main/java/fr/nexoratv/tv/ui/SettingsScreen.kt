@@ -43,6 +43,7 @@ import fr.nexoratv.tv.BuildConfig
 import fr.nexoratv.tv.UpdateState
 import fr.nexoratv.tv.core.Dates
 import fr.nexoratv.tv.data.UpdateInfo
+import fr.nexoratv.tv.ui.theme.Bricolage
 import fr.nexoratv.tv.ui.theme.NexoraBackdrop
 import fr.nexoratv.tv.ui.theme.NexoraBad
 import fr.nexoratv.tv.ui.theme.NexoraGradient
@@ -93,7 +94,7 @@ fun SettingsScreen(
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, "Retour")
                 }
                 Spacer(Modifier.width(10.dp))
-                Text("Paramètres", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = NexoraInk)
+                Text("Paramètres", fontFamily = Bricolage, fontSize = 28.sp, fontWeight = FontWeight.Bold, color = NexoraInk)
             }
 
             Group("Mise à jour") {

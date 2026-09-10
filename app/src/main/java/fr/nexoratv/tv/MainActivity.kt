@@ -6,6 +6,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -19,12 +21,13 @@ import fr.nexoratv.tv.player.PlayerActivity
 import fr.nexoratv.tv.player.PlayerQueue
 import fr.nexoratv.tv.ui.CatalogScreen
 import fr.nexoratv.tv.ui.ConnectScreen
-import fr.nexoratv.tv.ui.ErrorScreen
 import fr.nexoratv.tv.ui.HubScreen
 import fr.nexoratv.tv.ui.LoadingScreen
 import fr.nexoratv.tv.ui.MovieDetailScreen
 import fr.nexoratv.tv.ui.SeriesDetailScreen
 import fr.nexoratv.tv.ui.SettingsScreen
+import fr.nexoratv.tv.ui.StatusKind
+import fr.nexoratv.tv.ui.StatusScreen
 import fr.nexoratv.tv.ui.theme.NexoraTheme
 
 class MainActivity : ComponentActivity() {
@@ -67,65 +70,68 @@ private fun Root(onPlay: (sourceId: String, queue: List<Channel>, startIndex: In
     BackHandler(enabled = screen == Screen.Connect && sources.isNotEmpty()) { vm.goHome() }
 
     val ready = catalog as? CatalogState.Ready
+    val sourceId = vm.currentSource?.id ?: ""
+    val sourceName = vm.currentSource?.name ?: "NexoraTV"
 
-    when (val s = screen) {
-        Screen.Loading -> LoadingScreen(progress = null, expectVod = true)
+    Crossfade(targetState = screen, animationSpec = tween(180), label = "screen") { s ->
+        when (s) {
+            Screen.Loading -> LoadingScreen(progress = null, expectVod = true)
 
-        Screen.Connect -> ConnectScreen(vm)
+            Screen.Connect -> ConnectScreen(vm)
 
-        Screen.Settings -> SettingsScreen(
-            deviceMac = vm.deviceMac,
-            sourceName = vm.currentSource?.name ?: "—",
-            expiresAt = ready?.playlist?.expiresAt,
-            update = update,
-            diagnostics = diagnostics,
-            onCheckUpdate = vm::checkUpdate,
-            onInstall = vm::installUpdate,
-            onLaunchInstall = vm::launchInstall,
-            onChangePlaylist = vm::goConnect,
-            onReloadCatalog = { vm.loadCatalog(true) },
-            onClearDiagnostics = vm::clearDebugLog,
-            onBack = vm::goHome,
-        )
-
-        is Screen.Catalog ->
-            if (ready != null) CatalogScreen(
-                pl = ready.playlist,
-                section = s.section,
-                sourceId = vm.currentSource?.id ?: "",
-                sourceName = vm.currentSource?.name ?: "NexoraTV",
-                onPlay = onPlay,
-                onOpenMovie = vm::openMovie,
-                onOpenSeries = vm::openSeries,
+            Screen.Settings -> SettingsScreen(
+                deviceMac = vm.deviceMac,
+                sourceName = vm.currentSource?.name ?: "—",
+                expiresAt = ready?.playlist?.expiresAt,
+                update = update,
+                diagnostics = diagnostics,
+                onCheckUpdate = vm::checkUpdate,
+                onInstall = vm::installUpdate,
+                onLaunchInstall = vm::launchInstall,
+                onChangePlaylist = vm::goConnect,
+                onReloadCatalog = { vm.loadCatalog(true) },
+                onClearDiagnostics = vm::clearDebugLog,
                 onBack = vm::goHome,
-            ) else LoadingScreen(progress = loadProgress, expectVod = vm.loadExpectVod)
-
-        is Screen.MovieDetail -> MovieDetailScreen(
-            state = detail,
-            sourceId = vm.currentSource?.id ?: "",
-            onPlay = onPlay,
-            onBack = vm::backToCatalog,
-        )
-
-        is Screen.SeriesDetail -> SeriesDetailScreen(
-            state = detail,
-            sourceId = vm.currentSource?.id ?: "",
-            onPlay = onPlay,
-            onBack = vm::backToCatalog,
-        )
-
-        Screen.Home -> when (val cs = catalog) {
-            is CatalogState.Ready -> HubScreen(
-                sourceName = vm.currentSource?.name ?: "NexoraTV",
-                liveCount = cs.playlist.live.size,
-                movieCount = cs.playlist.movies.size,
-                seriesCount = cs.playlist.series.size,
-                expiresAt = cs.playlist.expiresAt,
-                onOpenSection = vm::openSection,
-                onSettings = vm::openSettings,
             )
-            is CatalogState.Error -> ErrorScreen(cs.message) { vm.loadCatalog(true) }
-            else -> LoadingScreen(progress = loadProgress, expectVod = vm.loadExpectVod)
+
+            is Screen.Catalog ->
+                if (ready != null) CatalogScreen(
+                    vm = vm,
+                    pl = ready.playlist,
+                    section = s.section,
+                    sourceId = sourceId,
+                    sourceName = sourceName,
+                    onPlay = onPlay,
+                    onOpenMovie = vm::openMovie,
+                    onOpenSeries = vm::openSeries,
+                    onBack = vm::goHome,
+                ) else LoadingScreen(progress = loadProgress, expectVod = vm.loadExpectVod)
+
+            is Screen.MovieDetail -> MovieDetailScreen(
+                state = detail, sourceId = sourceId, onPlay = onPlay, onBack = vm::backToCatalog,
+            )
+
+            is Screen.SeriesDetail -> SeriesDetailScreen(
+                state = detail, sourceId = sourceId, onPlay = onPlay, onBack = vm::backToCatalog,
+            )
+
+            Screen.Home -> when (val cs = catalog) {
+                is CatalogState.Ready -> HubScreen(
+                    sourceName = sourceName,
+                    playlist = cs.playlist,
+                    expiresAt = cs.playlist.expiresAt,
+                    onOpenSection = vm::openSection,
+                    onSettings = vm::openSettings,
+                )
+                is CatalogState.Error -> StatusScreen(
+                    title = "Chargement impossible",
+                    subtitle = cs.message,
+                    kind = StatusKind.NETWORK,
+                    actionLabel = "Réessayer",
+                    onAction = { vm.loadCatalog(true) },
+                )
+                else -> LoadingScreen(progress = loadProgress, expectVod = vm.loadExpectVod)
+            }
         }
     }
 }

@@ -27,9 +27,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.tv.material3.Button
 import androidx.tv.material3.Text
 import fr.nexoratv.tv.core.model.LoadProgress
+import fr.nexoratv.tv.ui.theme.Bricolage
 import fr.nexoratv.tv.ui.theme.NexoraBackdrop
 import fr.nexoratv.tv.ui.theme.NexoraGradient
 import fr.nexoratv.tv.ui.theme.NexoraInk
@@ -49,6 +49,7 @@ fun LoadingScreen(progress: LoadProgress?, expectVod: Boolean) {
         ) {
             Text(
                 "NexoraTV",
+                fontFamily = Bricolage,
                 fontSize = 38.sp,
                 fontWeight = FontWeight.ExtraBold,
                 style = TextStyle(brush = NexoraGradient),
@@ -126,27 +127,3 @@ private fun StepRow(label: String, done: Boolean, active: Boolean, value: String
     }
 }
 
-/** Erreur de chargement plein écran, avec bouton « Réessayer ». */
-@Composable
-fun ErrorScreen(message: String, onRetry: () -> Unit) {
-    val focus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
-    Box(Modifier.fillMaxSize().background(NexoraBackdrop), Alignment.Center) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-            modifier = Modifier.padding(48.dp).widthIn(max = 460.dp),
-        ) {
-            Text(
-                "NexoraTV",
-                fontSize = 30.sp,
-                fontWeight = FontWeight.ExtraBold,
-                style = TextStyle(brush = NexoraGradient),
-            )
-            Text("Chargement impossible", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-            Text(message, color = NexoraInkDim, fontSize = 14.sp, textAlign = TextAlign.Center)
-            Spacer(Modifier.height(4.dp))
-            Button(onClick = onRetry, modifier = Modifier.focusRequester(focus)) { Text("Réessayer") }
-        }
-    }
-}

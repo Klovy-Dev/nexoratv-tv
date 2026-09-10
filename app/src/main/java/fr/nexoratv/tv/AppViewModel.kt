@@ -1,6 +1,7 @@
 package fr.nexoratv.tv
 
 import android.app.Application
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import fr.nexoratv.tv.core.DebugLog
@@ -90,7 +91,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val detail: StateFlow<DetailState> = _detail.asStateFlow()
 
     /** Section catalogue d'où l'on vient (pour le retour depuis une fiche). */
-    private var lastSection: Section = Section.MOVIES
+    var lastSection: Section = Section.MOVIES
+        private set
+
+    /** État d'écran conservé par section : on retrouve sa place au retour. */
+    val catalogQuery = mutableStateMapOf<Section, String>()
+    val catalogCategory = mutableStateMapOf<Section, Int>()
+    val catalogScroll = mutableStateMapOf<Section, Int>()
 
     /** Journal de chargement (Paramètres → Diagnostic). */
     val debugLog: StateFlow<List<String>> = DebugLog.lines
